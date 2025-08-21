@@ -1,4 +1,6 @@
-﻿node_modules
+node_modules
 dist
 .env
 *.log
+full_employees_list.csv
+simple_clear_prompt.md
