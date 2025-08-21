@@ -133,6 +133,27 @@ const ExpensesPage = () => {
     };
 
     fetchExpensesData();
+
+    const channel = supabase.channel('expenses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, (payload) => {
+        console.log('Change received!', payload);
+        if (payload.eventType === 'INSERT') {
+          setExpenses(currentExpenses => [payload.new, ...currentExpenses]);
+        }
+        if (payload.eventType === 'UPDATE') {
+          setExpenses(currentExpenses => currentExpenses.map(expense => 
+            expense.id === payload.new.id ? payload.new : expense
+          ));
+        }
+        if (payload.eventType === 'DELETE') {
+          setExpenses(currentExpenses => currentExpenses.filter(expense => expense.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Load fund collection data (payments + employee totals)
@@ -387,9 +408,6 @@ const ExpensesPage = () => {
 
       alert('Expense recorded successfully!');
       
-      // Refresh the page data
-      window.location.reload();
-      
     } catch (error) {
       console.error('Error recording expense:', error);
       alert('Error recording expense: ' + error.message);
@@ -430,9 +448,6 @@ const ExpensesPage = () => {
       if (error) throw error;
 
       alert('Expense deleted successfully!');
-      
-      // Refresh the page data
-      window.location.reload();
       
     } catch (error) {
       console.error('Error deleting expense:', error);
@@ -492,9 +507,6 @@ const ExpensesPage = () => {
       setEditingExpense(null);
       setShowEditForm(false);
       setShowExpenseModal(false);
-      
-      // Refresh the page data
-      window.location.reload();
       
     } catch (error) {
       console.error('Error saving expense:', error);
