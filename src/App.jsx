@@ -9,6 +9,7 @@ import EmployeesPage from './pages/EmployeesPage';
 import FundCollectionPage from './pages/FundCollectionPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
+import BillSharingPage from './pages/BillSharingPage';
 
 function App() {
   return (
@@ -55,6 +56,14 @@ function App() {
           element={
             <ProtectedRoute>
               <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bill-sharing"
+          element={
+            <ProtectedRoute>
+              <BillSharingPage />
             </ProtectedRoute>
           }
         />

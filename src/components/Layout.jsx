@@ -10,7 +10,8 @@ import {
   LogOut,
   Menu,
   X,
-  User
+  User,
+  Share2
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -23,6 +24,7 @@ const Layout = ({ children }) => {
     { name: 'Employees', href: '/employees', icon: Users },
     { name: 'Fund Collection', href: '/fund-collection', icon: PiggyBank },
     { name: 'Expenses', href: '/expenses', icon: Receipt },
+    { name: 'Bill Sharing', href: '/bill-sharing', icon: Share2 },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
