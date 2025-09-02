@@ -9,6 +9,7 @@ const BillSharingPage = () => {
   const [selectedExpenses, setSelectedExpenses] = useState(new Set());
   const [selectedEmployees, setSelectedEmployees] = useState(new Set());
   const [birthdayPeople, setBirthdayPeople] = useState(new Set());
+  const [participantFilter, setParticipantFilter] = useState('all'); // all | fund | direct | active
 
   useEffect(() => {
     const fetchData = async () => {
@@ -390,9 +391,22 @@ const BillSharingPage = () => {
 
             {/* 2. Select Employees */}
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">2. Select Participants</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">2. Select Participants</h2>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button type="button" onClick={() => setParticipantFilter('all')} className={`px-3 py-1 rounded-full text-sm border ${participantFilter === 'all' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'} hover:border-indigo-500`}>All</button>
+                <button type="button" onClick={() => setParticipantFilter('fund')} className={`px-3 py-1 rounded-full text-sm border ${participantFilter === 'fund' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'} hover:border-indigo-500`}>Fund</button>
+                <button type="button" onClick={() => setParticipantFilter('direct')} className={`px-3 py-1 rounded-full text-sm border ${participantFilter === 'direct' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'} hover:border-indigo-500`}>Direct</button>
+                <button type="button" onClick={() => setParticipantFilter('active')} className={`px-3 py-1 rounded-full text-sm border ${participantFilter === 'active' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'} hover:border-indigo-500`}>Active</button>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
-                {employees.map(emp => (
+                {employees
+                  .filter(emp => {
+                    if (participantFilter === 'fund') return !!emp.participates_in_fund;
+                    if (participantFilter === 'direct') return emp.participates_in_fund === false;
+                    if (participantFilter === 'active') return (emp.status === 'active') && !emp.leave_date;
+                    return true;
+                  })
+                  .map(emp => (
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
                     <input
                       type="checkbox"
