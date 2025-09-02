@@ -108,10 +108,11 @@ const FundCollectionPage = () => {
         // Fetch real data from Supabase
         console.log('Fetching fund collection data from Supabase...');
 
-        // Get ALL employees (including those who left)
+        // Get only employees participating in the fund
         const employeesResponse = await supabase
           .from('employees')
-          .select('*');
+          .select('*')
+          .eq('participates_in_fund', true);
 
         console.log('Employees response:', employeesResponse);
         if (employeesResponse.error) {
@@ -119,13 +120,14 @@ const FundCollectionPage = () => {
           throw employeesResponse.error;
         }
 
-        // Get payments with employee info
+        // Get payments with employee info, only for fund members
         const paymentsResponse = await supabase
           .from('fund_payments')
           .select(`
             *,
-            employees (name, department)
+            employees!inner(name, department)
           `)
+          .eq('employees.participates_in_fund', true)
           .order('created_at', { ascending: false });
 
         console.log('Payments response:', paymentsResponse);
