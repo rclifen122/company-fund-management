@@ -6,6 +6,14 @@ const ProtectedRoute = ({ children }) => {
   const location = useLocation();
   const [ready, setReady] = useState(false);
   const [hasSession, setHasSession] = useState(false);
+  const isDevelopmentMode = !import.meta.env.VITE_SUPABASE_URL ||
+    import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+    import.meta.env.VITE_DEV_MODE === 'true';
+
+  // In demo/dev mode, bypass auth enforcement
+  if (isDevelopmentMode) {
+    return <div>{children}</div>;
+  }
 
   useEffect(() => {
     let mounted = true;

@@ -1,6 +1,8 @@
 node_modules
 dist
 .env
+.env.*
+!.env.example
 *.log
 full_employees_list.csv
 simple_clear_prompt.md

@@ -78,14 +78,50 @@ const BillSharingPage = () => {
         // Override mapping: rely on DB participates_in_fund
         const normalizedEmployees = (employeesData || []).map(emp => ({
           ...emp,
-          participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true,
+          participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : false,
         }));
-        setEmployees(normalizedEmployees);
-        // Default select all active employees (exclude leavers/inactive)
-        const defaultSelected = normalizedEmployees
-          .filter(e => e.status === 'active' && !e.leave_date)
-          .map(e => e.id);
-        setSelectedEmployees(new Set(defaultSelected));
+        // Try to override participates_in_fund using CSV in public folder
+        try {
+          const res = await fetch('/full_employees_list.csv');
+          if (res.ok) {
+            const text = await res.text();
+            const lines = text.split(/\r?\n/).filter(Boolean);
+            const map = new Map();
+            for (let i = 1; i < lines.length; i++) {
+              const [rawName, status] = lines[i].split(',');
+              if (!rawName || !status) continue;
+              const key = rawName.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g,' ').toUpperCase();
+              const isFund = /^qu/i.test(status.trim());
+              map.set(key, isFund);
+            }
+            const merged = normalizedEmployees.map(emp => {
+              const key = (emp.name || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g,' ').toUpperCase();
+              const csvFlag = map.get(key);
+              return {
+                ...emp,
+                participates_in_fund: typeof csvFlag === 'boolean' ? csvFlag : emp.participates_in_fund,
+              };
+            });
+            setEmployees(merged);
+            // Default select all active employees (exclude leavers/inactive)
+            const defaultSelected = merged
+              .filter(e => e.status === 'active' && !e.leave_date)
+              .map(e => e.id);
+            setSelectedEmployees(new Set(defaultSelected));
+          } else {
+            setEmployees(normalizedEmployees);
+            const defaultSelected = normalizedEmployees
+              .filter(e => e.status === 'active' && !e.leave_date)
+              .map(e => e.id);
+            setSelectedEmployees(new Set(defaultSelected));
+          }
+        } catch {
+          setEmployees(normalizedEmployees);
+          const defaultSelected = normalizedEmployees
+            .filter(e => e.status === 'active' && !e.leave_date)
+            .map(e => e.id);
+          setSelectedEmployees(new Set(defaultSelected));
+        }
       }
 
       setLoading(false);
@@ -423,7 +459,7 @@ const BillSharingPage = () => {
                     <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
                       <p className="font-medium text-gray-800">{emp.name}</p>
                       <p className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-800'}`}>
-                        {emp.participates_in_fund ? 'Quỹ' : 'Riêng'}
+                        {emp.participates_in_fund ? 'Fund' : 'Direct'}
                       </p>
                     </label>
                   </div>
