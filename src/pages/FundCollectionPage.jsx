@@ -16,9 +16,8 @@ const FundCollectionPage = () => {
   const [monthFilter, setMonthFilter] = useState('all'); // all, T1, T2, T3... T12
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
 
-  // Fetch real data from Supabase
-  useEffect(() => {
-    const fetchFundCollectionData = async () => {
+  // Fetch real data from Supabase (reusable)
+  const fetchFundCollectionData = async () => {
       try {
         setLoading(true);
 
@@ -214,7 +213,7 @@ const FundCollectionPage = () => {
           recorded_by: 'Admin' // Will be dynamic in future
         })) || [];
 
-        setEmployees(processedEmployees);
+        setEmployees(processedPayments ? processedEmployees : []);
         setPayments(processedPayments);
         setLoading(false);
 
@@ -238,7 +237,37 @@ const FundCollectionPage = () => {
       }
     };
 
+  useEffect(() => {
     fetchFundCollectionData();
+  }, []);
+
+  // Realtime updates: refresh data on employees/payments changes
+  useEffect(() => {
+    const isDevelopmentMode =
+      !import.meta.env.VITE_SUPABASE_URL ||
+      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+      import.meta.env.VITE_DEV_MODE === 'true';
+
+    if (isDevelopmentMode) return;
+
+    const employeesChannel = supabase
+      .channel('employees-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, async () => {
+        await fetchFundCollectionData();
+      })
+      .subscribe();
+
+    const paymentsChannel = supabase
+      .channel('fund_payments-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payments' }, async () => {
+        await fetchFundCollectionData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(employeesChannel);
+      supabase.removeChannel(paymentsChannel);
+    };
   }, []);
 
   const formatVND = (value) => {
@@ -479,9 +508,9 @@ const FundCollectionPage = () => {
       if (error) throw error;
 
       alert('Payment recorded successfully!');
-      
-      // Refresh the page data
-      window.location.reload();
+      // Refresh data without full reload and close modal
+      await fetchFundCollectionData();
+      setShowPaymentModal(false);
       
     } catch (error) {
       console.error('Error recording payment:', error);

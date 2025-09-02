@@ -13,9 +13,8 @@ const EmployeesPage = () => {
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
 
-  // Fetch real data from Supabase
-  useEffect(() => {
-    const fetchEmployeesData = async () => {
+  // Fetch real data from Supabase (reusable)
+  const fetchEmployeesData = async () => {
       try {
         setLoading(true);
 
@@ -188,7 +187,37 @@ const EmployeesPage = () => {
       }
     };
 
+  useEffect(() => {
     fetchEmployeesData();
+  }, []);
+
+  // Realtime updates: refresh data on employees/payments changes
+  useEffect(() => {
+    const isDevelopmentMode =
+      !import.meta.env.VITE_SUPABASE_URL ||
+      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+      import.meta.env.VITE_DEV_MODE === 'true';
+
+    if (isDevelopmentMode) return;
+
+    const employeesChannel = supabase
+      .channel('employees-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, async () => {
+        await fetchEmployeesData();
+      })
+      .subscribe();
+
+    const paymentsChannel = supabase
+      .channel('fund_payments-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payments' }, async () => {
+        await fetchEmployeesData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(employeesChannel);
+      supabase.removeChannel(paymentsChannel);
+    };
   }, []);
 
   const formatVND = (value) => {
@@ -276,13 +305,11 @@ const EmployeesPage = () => {
         alert('Employee added successfully!');
       }
 
-      // Reset form state
+      // Reset form state and refresh data without full reload
       setEditingEmployee(null);
       setShowEditForm(false);
       setShowCreateForm(false);
-      
-      // Refresh the page data
-      window.location.reload();
+      await fetchEmployeesData();
       
     } catch (error) {
       console.error('Error saving employee:', error);
@@ -324,9 +351,8 @@ const EmployeesPage = () => {
       if (error) throw error;
 
       alert('Employee deleted successfully!');
-      
-      // Refresh the page data
-      window.location.reload();
+      // Refresh data without full reload
+      await fetchEmployeesData();
       
     } catch (error) {
       console.error('Error deleting employee:', error);

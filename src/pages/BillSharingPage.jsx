@@ -28,7 +28,8 @@ const BillSharingPage = () => {
       // 2. Fetch Employees and merge with fund participation data
       const { data: employeesData, error: employeesError } = await supabase
         .from('employees')
-        .select('*');
+        .select('*')
+        .order('name', { ascending: true });
 
       if (employeesError) {
         console.error('Error fetching employees:', employeesError);
@@ -73,6 +74,12 @@ const BillSharingPage = () => {
           participates_in_fund: fundParticipationList[emp.name.toUpperCase()] || false,
         }));
         setEmployees(mergedEmployees);
+        // Override mapping: rely on DB participates_in_fund
+        const normalizedEmployees = (employeesData || []).map(emp => ({
+          ...emp,
+          participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true,
+        }));
+        setEmployees(normalizedEmployees);
       }
 
       setLoading(false);
@@ -304,6 +311,40 @@ const BillSharingPage = () => {
     };
 
     fetchSharingHistory();
+  }, []);
+
+  // Realtime refresh employees/expenses for live list updates
+  useEffect(() => {
+    const isDevelopmentMode =
+      !import.meta.env.VITE_SUPABASE_URL ||
+      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+      import.meta.env.VITE_DEV_MODE === 'true';
+
+    if (isDevelopmentMode) return;
+
+    const empChannel = supabase
+      .channel('bill-sharing-employees')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => {
+        // Reuse initial fetch for consistency
+        (async () => {
+          try { await (async () => { setLoading(true); const { data, error } = await supabase.from('employees').select('*').order('name', { ascending: true }); if (!error) { const normalized = (data || []).map(emp => ({ ...emp, participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true })); setEmployees(normalized); } setLoading(false); })(); } catch {}
+        })();
+      })
+      .subscribe();
+
+    const expChannel = supabase
+      .channel('bill-sharing-expenses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+        (async () => {
+          try { const { data, error } = await supabase.from('expenses').select('*').order('expense_date', { ascending: false }); if (!error) setExpenses(data || []); } catch {}
+        })();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(empChannel);
+      supabase.removeChannel(expChannel);
+    };
   }, []);
   
   const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
