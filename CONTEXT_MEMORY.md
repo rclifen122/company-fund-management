@@ -40,21 +40,25 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 - Protected: `/`, `/employees`, `/fund-collection`, `/expenses`, `/settings`, `/bill-sharing`.
 - Note: `ProtectedRoute` currently bypasses auth (intended for internal/demo use).
 
-## Pages – Key Behaviors
+## Pages - Key Behaviors
 - Home (`HomePage.jsx`)
   - Dashboard metrics, 12-month chart, expenses pie, recent activities.
   - Dev-mode mock data; otherwise aggregates from Supabase with careful total logic (avoid double counting; includes employees who left).
 - Fund Collection (`FundCollectionPage.jsx`)
   - Lists payments, filters, status badges; add payments via `PaymentModal`.
   - Computes total using: for leavers use `employees.total_paid`; for active, sum `fund_payments` (avoid double count).
+  - Realtime: subscribes to `employees` and `fund_payments` changes and refreshes state (no hard reloads).
 - Employees (`EmployeesPage.jsx`)
   - List, search, filters; CRUD via `EmployeeModal` (demo-mode inserts are mocked).
   - Derives current-month status from payments and dates.
+  - Realtime: subscribes to `employees` and `fund_payments`; updates list without hard reloads.
 - Expenses (`ExpensesPage.jsx`)
   - List, search, filters, sorting; CRUD via `ExpenseModal` (demo-mode mocked).
   - Total/current-month/category breakdowns; also computes fund total similar to other pages.
 - Bill Sharing (`BillSharingPage.jsx`)
   - Select expenses/employees/birthday people; compute fund vs direct payments.
+  - Participants list supports filters: All / Fund / Direct / Active; employees loaded from DB, sorted by name, using `participates_in_fund`.
+  - Realtime: subscribes to `employees` and `expenses` to refresh lists live.
   - Persists sharing and participant records to Supabase when configured.
 - Auth pages (`LoginPage.jsx`, `SignUpPage.jsx`, `ForgotPasswordPage.jsx`, `UpdatePasswordPage.jsx`)
   - Login simulates success in dev-mode; otherwise uses Supabase Auth flows.
@@ -84,19 +88,30 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - `bill_sharing_expenses`: composite PK, links expenses to sharings with `amount`.
   - `bill_sharing_participants`: `id`, `bill_sharing_id`, `employee_id`, `amount_owed`, `is_birthday_person`, `payment_method` ('fund'|'direct'), `payment_status` ('pending'|'paid'), `payment_date`.
 
-## Calculations – Notable Rules
+## Realtime
+- Migration `V3__enable_realtime.sql` adds tables to `supabase_realtime` publication:
+  - `employees`, `fund_payments`, `expenses`, `bill_sharing`, `bill_sharing_expenses`, `bill_sharing_participants`.
+- `REPLICA IDENTITY FULL` set on these tables so UPDATE/DELETE events include `old` rows.
+- Frontend subscriptions:
+  - Employees: `employees` + `fund_payments`.
+  - Fund Collection: `employees` + `fund_payments`.
+  - Expenses: `expenses` (pre-existing).
+  - Bill Sharing: `employees` + `expenses`.
+
+## Calculations - Notable Rules
 - Avoid double counting:
   - Employees who left: trust `employees.total_paid`.
   - Active employees: sum `fund_payments` (excluding leaver IDs).
 - Monthly status:
-  - If current month in `months_covered` → `paid`.
-  - Else if last payment >45 days ago → `overdue`; else `pending`.
+  - If current month in `months_covered` -> `paid`.
+  - Else if last payment >45 days ago -> `overdue`; else `pending`.
   - Employees with `leave_date` considered `completed` in dashboard context.
 
 ## Configuration Notes
 - Vite alias ensures `react-router-dom` resolves consistently.
 - Tailwind content globs include `index.html` and all files under `src`.
 - Styling baseline in `src/index.css`; extra `.currency-vnd` utility.
+ - Vercel: `vercel.json` rewrites `/(.*)` -> `/` to prevent deep-route reload errors.
 
 ## Known Issues / Observations
 - Vietnamese diacritics appear mojibake in several JSX/MD files (likely encoding mismatch). Consider normalizing to UTF-8.
@@ -119,3 +134,4 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 
 ---
 Last updated: commit time of this file.
+

@@ -9,7 +9,7 @@ const BillSharingPage = () => {
   const [selectedExpenses, setSelectedExpenses] = useState(new Set());
   const [selectedEmployees, setSelectedEmployees] = useState(new Set());
   const [birthdayPeople, setBirthdayPeople] = useState(new Set());
-  const [participantFilter, setParticipantFilter] = useState('all'); // all | fund | direct | active
+  const [participantFilter, setParticipantFilter] = useState('active'); // all | fund | direct | active
 
   useEffect(() => {
     const fetchData = async () => {
@@ -81,6 +81,11 @@ const BillSharingPage = () => {
           participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true,
         }));
         setEmployees(normalizedEmployees);
+        // Default select all active employees (exclude leavers/inactive)
+        const defaultSelected = normalizedEmployees
+          .filter(e => e.status === 'active' && !e.leave_date)
+          .map(e => e.id);
+        setSelectedEmployees(new Set(defaultSelected));
       }
 
       setLoading(false);
