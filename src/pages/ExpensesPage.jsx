@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
-import { Plus, Receipt, Calendar, DollarSign, TrendingDown, Search, Filter, FileText, PieChart, BarChart3, Eye, Download, Camera, AlertCircle, CheckCircle, Users, Banknote, Edit, Trash2 } from 'lucide-react';
+import { Plus, Receipt, Calendar, DollarSign, TrendingDown, Search, Filter, FileText, Edit, Trash2, Banknote } from 'lucide-react';
 
 const ExpensesPage = () => {
   const [expenses, setExpenses] = useState([]);
@@ -11,8 +11,6 @@ const ExpensesPage = () => {
   const [filterCategory, setFilterCategory] = useState('all');
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
-  const [dateFilter, setDateFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('date');
   const [error, setError] = useState(null);
   const [totalFundCollected, setTotalFundCollected] = useState(0);
 
@@ -41,12 +39,9 @@ const ExpensesPage = () => {
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      fetchExpensesData(),
-      // Other data fetching can be added here
-    ]).finally(() => setLoading(false));
+    Promise.all([fetchExpensesData()]).finally(() => setLoading(false));
 
-    const channel = supabase.channel('expenses-changes')
+    const channel = supabase.channel('expenses-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, payload => {
         fetchExpensesData();
       })
@@ -60,22 +55,20 @@ const ExpensesPage = () => {
   const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
   const formatDate = (dateString) => new Date(dateString).toLocaleDateString('vi-VN');
 
-  const getCategoryColor = (category) => {
-    const colors = { events: 'bg-purple-100 text-purple-800', gifts: 'bg-pink-100 text-pink-800', office_supplies: 'bg-blue-100 text-blue-800', other: 'bg-gray-100 text-gray-800' };
-    return colors[category] || colors.other;
-  };
-
   const getSharingStatusBadge = (status) => {
-    switch (status) {
-      case 'shared':
-      case 'partially_reimbursed':
-        return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">Đã chia sẻ</span>;
-      case 'fully_reimbursed':
-        return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Đã hoàn trả</span>;
-      case 'not_shared':
-      default:
-        return <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Chưa chia sẻ</span>;
-    }
+    const statusStyles = {
+      shared: 'bg-blue-100 text-blue-800',
+      partially_reimbursed: 'bg-yellow-100 text-yellow-800',
+      fully_reimbursed: 'bg-green-100 text-green-800',
+      not_shared: 'bg-gray-100 text-gray-800',
+    };
+    const statusText = {
+      shared: 'Đã chia sẻ',
+      partially_reimbursed: 'Hoàn trả một phần',
+      fully_reimbursed: 'Đã hoàn trả',
+      not_shared: 'Chưa chia sẻ',
+    };
+    return <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusStyles[status] || statusStyles.not_shared}`}>{statusText[status] || statusText.not_shared}</span>;
   };
 
   const handleExpenseSubmit = async (expenseData) => {
@@ -85,20 +78,16 @@ const ExpensesPage = () => {
       : await supabase.from('expenses').insert([expenseData]);
 
     if (error) {
-      alert('Error saving expense: ' + error.message);
+      alert('Error: ' + error.message);
     } else {
-      alert(`Expense ${isEditing ? 'updated' : 'recorded'} successfully!`);
       setShowExpenseModal(false);
       setEditingExpense(null);
-      fetchExpensesData();
     }
   };
 
   const handleDeleteExpense = async (expenseId) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return;
-    const { error } = await supabase.from('expenses').delete().eq('id', expenseId);
-    if (error) alert('Error deleting expense: ' + error.message);
-    else alert('Expense deleted successfully!');
+    if (!confirm('Are you sure?')) return;
+    await supabase.from('expenses').delete().eq('id', expenseId);
   };
 
   const handleEditExpense = (expense) => {
@@ -106,24 +95,19 @@ const ExpensesPage = () => {
     setShowExpenseModal(true);
   };
 
-  const sortedExpenses = [...expenses].sort((a, b) => new Date(b.expense_date) - new Date(a.expense_date));
+  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalNetExpenses = expenses.reduce((sum, expense) => sum + expense.net_amount, 0);
 
-  if (loading) {
-    return <Layout><div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div></div></Layout>;
-  }
-
-  if (error) {
-    return <Layout><div className="p-6"><div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded"><h2>Error</h2><p>{error}</p></div></div></Layout>;
-  }
+  if (loading) return <Layout><div>Loading...</div></Layout>;
+  if (error) return <Layout><div>Error: {error}</div></Layout>;
 
   return (
     <Layout>
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Quản Lý Chi Phí</h1>
-            <p className="mt-1 text-sm text-gray-500">Theo dõi và quản lý các khoản chi tiêu từ quỹ công ty</p>
+            <p className="mt-1 text-sm text-gray-500">Tổng chi ròng: {formatVND(totalNetExpenses)}</p>
           </div>
           <button onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700">
             <Plus className="h-4 w-4 mr-2" />
@@ -131,7 +115,6 @@ const ExpensesPage = () => {
           </button>
         </div>
 
-        {/* Table */}
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -147,12 +130,12 @@ const ExpensesPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {sortedExpenses.map((expense) => (
+                {expenses.map((expense) => (
                   <tr key={expense.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(expense.expense_date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{expense.description}</div>
-                      <div className={`text-xs px-2 py-0.5 rounded-full inline-block ${getCategoryColor(expense.category)}`}>{expense.category}</div>
+                      <div className="text-xs text-gray-500">{expense.category}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-700">{formatVND(expense.amount)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">{formatVND(expense.amount_reimbursed)}</td>
@@ -173,7 +156,7 @@ const ExpensesPage = () => {
 
         <ExpenseModal
           isOpen={showExpenseModal}
-          onClose={() => setShowExpenseModal(false)}
+          onClose={() => { setShowExpenseModal(false); setEditingExpense(null); }}
           onSubmit={handleExpenseSubmit}
           expense={editingExpense}
           isEditing={!!editingExpense}
