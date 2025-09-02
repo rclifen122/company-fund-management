@@ -34,20 +34,16 @@ const BillSharingPage = () => {
 
       if (employeesError) {
         console.error('Error fetching employees:', employeesError);
-      } else {\n        const normalizedEmployees = (employeesData || []).map(emp => ({\n          ...emp,\n          participates_in_fund: emp.participates_in_fund === true\n        }));\n        setEmployees(normalizedEmployees);\n        const defaultSelected = normalizedEmployees\n          .filter(e => e.status === 'active' && !e.leave_date)\n          .map(e => e.id);\n        setSelectedEmployees(new Set(defaultSelected));\n      } else {
-            setEmployees(normalizedEmployees);
-            const defaultSelected = normalizedEmployees
-              .filter(e => e.status === 'active' && !e.leave_date)
-              .map(e => e.id);
-            setSelectedEmployees(new Set(defaultSelected));
-          }
-        } catch {
-          setEmployees(normalizedEmployees);
-          const defaultSelected = normalizedEmployees
-            .filter(e => e.status === 'active' && !e.leave_date)
-            .map(e => e.id);
-          setSelectedEmployees(new Set(defaultSelected));
-        }
+      } else {
+        const normalizedEmployees = (employeesData || []).map(emp => ({
+          ...emp,
+          participates_in_fund: emp.participates_in_fund === true
+        }));
+        setEmployees(normalizedEmployees);
+        const defaultSelected = normalizedEmployees
+          .filter(e => e.status === 'active' && !e.leave_date)
+          .map(e => e.id);
+        setSelectedEmployees(new Set(defaultSelected));
       }
 
       setLoading(false);
@@ -212,48 +208,51 @@ const BillSharingPage = () => {
     let fundTotal = 0;
     let directTotal = 0;
 
-    // Multiple birthday logic
-    if (birthdayBoys.size > 1) {
-      const costPerBirthdayPerson = total / birthdayBoys.size;
-      employees.forEach(emp => {
-        if (participants.has(emp.id)) {
-          let amountOwed = 0;
-          if (birthdayBoys.has(emp.id)) {
-            amountOwed = costPerBirthdayPerson;
-          }
+    const T = total;
+    const N = participants.size;
+    const B = birthdayBoys.size;
 
-          const paymentMethod = emp.participates_in_fund ? 'fund' : 'direct';
-          if (paymentMethod === 'fund') {
-            fundTotal += amountOwed;
+    const amountOwedPerPerson = {};
+
+    if (N === 1) {
+      const singleParticipantId = participants.values().next().value;
+      const isBirthday = birthdayBoys.has(singleParticipantId);
+      const owed = isBirthday ? 0 : T;
+      amountOwedPerPerson[singleParticipantId] = owed;
+      setAmountPerPerson(owed);
+    } else { // N > 1
+      if (B === 0) {
+        const share = T / N;
+        participants.forEach(id => (amountOwedPerPerson[id] = share));
+        setAmountPerPerson(share);
+      } else { // B > 0
+        const shareForNonBirthdayPerson = T / (N - 1);
+        const shareForBirthdayPerson = (shareForNonBirthdayPerson * (B - 1)) / B;
+        participants.forEach(id => {
+          if (birthdayBoys.has(id)) {
+            amountOwedPerPerson[id] = shareForBirthdayPerson;
           } else {
-            directTotal += amountOwed;
+            amountOwedPerPerson[id] = shareForNonBirthdayPerson;
           }
-
-          breakdown.push({ ...emp, amountOwed, paymentMethod });
-        }
-      });
-    } else { // Single or no birthday logic
-      const individualShare = payers.size > 0 ? total / payers.size : 0;
-      setAmountPerPerson(individualShare);
-
-      employees.forEach(emp => {
-        if (participants.has(emp.id)) {
-          const isPayer = payers.has(emp.id);
-          const amountOwed = isPayer ? individualShare : 0;
-          const paymentMethod = emp.participates_in_fund ? 'fund' : 'direct';
-
-          if (isPayer) {
-            if (paymentMethod === 'fund') {
-              fundTotal += amountOwed;
-            } else {
-              directTotal += amountOwed;
-            }
-          }
-
-          breakdown.push({ ...emp, amountOwed, paymentMethod });
-        }
-      });
+        });
+        // The "Amount Per Person" is ambiguous, so we use a general average.
+        setAmountPerPerson(T / N);
+      }
     }
+
+    employees.forEach(emp => {
+      if (participants.has(emp.id)) {
+        const amountOwed = amountOwedPerPerson[emp.id] || 0;
+        const paymentMethod = emp.participates_in_fund ? 'fund' : 'direct';
+
+        if (paymentMethod === 'fund') {
+          fundTotal += amountOwed;
+        } else {
+          directTotal += amountOwed;
+        }
+        breakdown.push({ ...emp, amountOwed, paymentMethod });
+      }
+    });
 
     setFundPayment(fundTotal);
     setDirectPayment(directTotal);
@@ -294,7 +293,7 @@ const BillSharingPage = () => {
       .channel('bill-sharing-employees')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, () => {
         // Reuse initial fetch for consistency
-        (async () => {
+        (async () => { 
           try { await (async () => { setLoading(true); const { data, error } = await supabase.from('employees').select('*').order('name', { ascending: true }); if (!error) { const normalized = (data || []).map(emp => ({ ...emp, participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true })); setEmployees(normalized); } setLoading(false); })(); } catch {}
         })();
       })
@@ -395,7 +394,7 @@ const BillSharingPage = () => {
 
             {/* 3. Select Birthday People */}
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">3. Select Birthday People (will not pay)</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">3. Select Birthday People</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
                 {employees.filter(e => selectedEmployees.has(e.id)).map(emp => (
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${birthdayPeople.has(emp.id) ? 'bg-pink-50 border-pink-300' : 'bg-gray-50'}`}>
@@ -521,4 +520,3 @@ const BillSharingPage = () => {
 };
 
 export default BillSharingPage;
-
