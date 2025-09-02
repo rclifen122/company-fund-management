@@ -1,0 +1,57 @@
+
+      if (employeesError) {
+        console.error('Error fetching employees:', employeesError);
+      } else {
+        const fundParticipationList = {
+          'MASUDA TAKEHIKO': true,
+          'NGUYỄN TRUNG HIẾU': true,
+          'IMAMACHI': true,
+          'VI TRẦN PHƯƠЯ LINH': true,
+          'NGUYỄN HOÀNG YẾN NHI': true,
+          'TRẦN ĐÌNH LĨNH': true,
+          'NGUYỄN VĂN CHUYỀN': true,
+          'TRẦN QUỐC LỘC': true,
+          'TRẦN THỊ HUYỀN': true,
+          'LÊ VĂN LỘC': true,
+          'NGUYỄN THÀNH NGUYÊN': true,
+          'TRẦN THANH KIM': true,
+          'TRẦN BẢO': true,
+          'DƯƠЯ ANH THƯ': true,
+          'MẠC TUẤN ANH': true,
+          'ĐẶNG THỊ LAN': true,
+          'HOSHIYAMA': false,
+          'LÊ THẾ NGÂN': false,
+          'VĂN HOÀNG THỜI': false,
+          'TRƯƠЯ NHỈ KHANG': false,
+          'NGUYỄN THỊ CẨM LAN': false,
+          'NGUYỄN THỊ KIM NGỌC': false,
+          'NGUYỄN THỊ HỒNGHUỆ': false,
+          'LÊ THÀNH TIẾN': false,
+          'NGUYỄN  THÙY DUNG': false,
+          'PHẠM HỮU HẢI': false,
+          'NGUYỄN THỊ TUYẾT LINH': false,
+          'NGUYỄN THỊ THANH THẢO': false,
+          'BÙI THỊ MỸ HOA': false,
+          'TRỊNH LÊ MỸ DUYÊN': false,
+          'QUỲNH NHƯ': false,
+          'LÊ THÁI': false,
+        };
+
+        const mergedEmployees = employeesData.map(emp => ({
+          ...emp,
+          participates_in_fund: fundParticipationList[emp.name.toUpperCase()] || false,
+        }));
+        setEmployees(mergedEmployees);
+        // Override mapping: rely on DB participates_in_fund
+        const normalizedEmployees = (employeesData || []).map(emp => ({
+          ...emp,
+          participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : true,
+        }));
+        setEmployees(normalizedEmployees);
+        // Default select all active employees (exclude leavers/inactive)
+        const defaultSelected = normalizedEmployees
+          .filter(e => e.status === 'active' && !e.leave_date)
+          .map(e => e.id);
+        setSelectedEmployees(new Set(defaultSelected));
+      }
+

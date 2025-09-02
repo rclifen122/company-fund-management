@@ -34,81 +34,7 @@ const BillSharingPage = () => {
 
       if (employeesError) {
         console.error('Error fetching employees:', employeesError);
-      } else {
-        const fundParticipationList = {
-          'MASUDA TAKEHIKO': true,
-          'NGUYỄN TRUNG HIẾU': true,
-          'IMAMACHI': true,
-          'VI TRẦN PHƯƠЯ LINH': true,
-          'NGUYỄN HOÀNG YẾN NHI': true,
-          'TRẦN ĐÌNH LĨNH': true,
-          'NGUYỄN VĂN CHUYỀN': true,
-          'TRẦN QUỐC LỘC': true,
-          'TRẦN THỊ HUYỀN': true,
-          'LÊ VĂN LỘC': true,
-          'NGUYỄN THÀNH NGUYÊN': true,
-          'TRẦN THANH KIM': true,
-          'TRẦN BẢO': true,
-          'DƯƠЯ ANH THƯ': true,
-          'MẠC TUẤN ANH': true,
-          'ĐẶNG THỊ LAN': true,
-          'HOSHIYAMA': false,
-          'LÊ THẾ NGÂN': false,
-          'VĂN HOÀNG THỜI': false,
-          'TRƯƠЯ NHỈ KHANG': false,
-          'NGUYỄN THỊ CẨM LAN': false,
-          'NGUYỄN THỊ KIM NGỌC': false,
-          'NGUYỄN THỊ HỒNGHUỆ': false,
-          'LÊ THÀNH TIẾN': false,
-          'NGUYỄN  THÙY DUNG': false,
-          'PHẠM HỮU HẢI': false,
-          'NGUYỄN THỊ TUYẾT LINH': false,
-          'NGUYỄN THỊ THANH THẢO': false,
-          'BÙI THỊ MỸ HOA': false,
-          'TRỊNH LÊ MỸ DUYÊN': false,
-          'QUỲNH NHƯ': false,
-          'LÊ THÁI': false,
-        };
-
-        const mergedEmployees = employeesData.map(emp => ({
-          ...emp,
-          participates_in_fund: fundParticipationList[emp.name.toUpperCase()] || false,
-        }));
-        setEmployees(mergedEmployees);
-        // Override mapping: rely on DB participates_in_fund
-        const normalizedEmployees = (employeesData || []).map(emp => ({
-          ...emp,
-          participates_in_fund: typeof emp.participates_in_fund === 'boolean' ? emp.participates_in_fund : false,
-        }));
-        // Try to override participates_in_fund using CSV in public folder
-        try {
-          const res = await fetch('/full_employees_list.csv');
-          if (res.ok) {
-            const text = await res.text();
-            const lines = text.split(/\r?\n/).filter(Boolean);
-            const map = new Map();
-            for (let i = 1; i < lines.length; i++) {
-              const [rawName, status] = lines[i].split(',');
-              if (!rawName || !status) continue;
-              const key = rawName.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g,' ').toUpperCase();
-              const isFund = /^qu/i.test(status.trim());
-              map.set(key, isFund);
-            }
-            const merged = normalizedEmployees.map(emp => {
-              const key = (emp.name || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g,' ').toUpperCase();
-              const csvFlag = map.get(key);
-              return {
-                ...emp,
-                participates_in_fund: typeof csvFlag === 'boolean' ? csvFlag : emp.participates_in_fund,
-              };
-            });
-            setEmployees(merged);
-            // Default select all active employees (exclude leavers/inactive)
-            const defaultSelected = merged
-              .filter(e => e.status === 'active' && !e.leave_date)
-              .map(e => e.id);
-            setSelectedEmployees(new Set(defaultSelected));
-          } else {
+      } else {\n        const normalizedEmployees = (employeesData || []).map(emp => ({\n          ...emp,\n          participates_in_fund: emp.participates_in_fund === true\n        }));\n        setEmployees(normalizedEmployees);\n        const defaultSelected = normalizedEmployees\n          .filter(e => e.status === 'active' && !e.leave_date)\n          .map(e => e.id);\n        setSelectedEmployees(new Set(defaultSelected));\n      } else {
             setEmployees(normalizedEmployees);
             const defaultSelected = normalizedEmployees
               .filter(e => e.status === 'active' && !e.leave_date)
@@ -458,7 +384,7 @@ const BillSharingPage = () => {
                     />
                     <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
                       <p className="font-medium text-gray-800">{emp.name}</p>
-                      <p className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-800'}`}>
+                      <p className={`text-xs font-medium px-2 py-0.5 rounded-full inline-block ${emp.participates_in_fund ? 'Fund' : 'Direct'}`}>
                         {emp.participates_in_fund ? 'Fund' : 'Direct'}
                       </p>
                     </label>
@@ -595,3 +521,4 @@ const BillSharingPage = () => {
 };
 
 export default BillSharingPage;
+
