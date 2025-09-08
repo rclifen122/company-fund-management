@@ -72,16 +72,39 @@ const ExpensesPage = () => {
   };
 
   const handleExpenseSubmit = async (expenseData) => {
-    const isEditing = !!editingExpense;
-    const { data, error } = isEditing
-      ? await supabase.from('expenses').update(expenseData).eq('id', editingExpense.id)
-      : await supabase.from('expenses').insert([expenseData]);
+    try {
+      const isEditing = !!editingExpense;
 
-    if (error) {
-      alert('Error: ' + error.message);
-    } else {
+      // Build payload with only columns that exist in the expenses table
+      const payload = {
+        amount: Number(expenseData.amount || 0),
+        category: expenseData.category,
+        description: expenseData.description,
+        expense_date: expenseData.expense_date,
+        notes: expenseData.notes || null,
+      };
+
+      // If a URL was provided explicitly, keep it. Ignore receipt_file here to avoid unknown column errors.
+      if (expenseData.receipt_url) {
+        // If a URL was provided explicitly, keep it
+        payload.receipt_url = expenseData.receipt_url;
+      }
+
+      let error;
+      if (isEditing) {
+        // Update existing expense
+        ({ error } = await supabase.from('expenses').update(payload).eq('id', editingExpense.id));
+      } else {
+        // Insert new expense
+        ({ error } = await supabase.from('expenses').insert([payload]));
+      }
+
+      if (error) throw error;
+
       setShowExpenseModal(false);
       setEditingExpense(null);
+    } catch (err) {
+      alert('Error: ' + err.message);
     }
   };
 

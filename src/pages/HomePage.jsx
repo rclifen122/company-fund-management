@@ -528,17 +528,23 @@ const HomePage = () => {
         return;
       }
 
-      // Insert expense into Supabase
-      const { data, error } = await supabase
+      // Prepare payload for insert
+      const payload = {
+        amount: Number(expenseData.amount || 0),
+        category: expenseData.category,
+        description: expenseData.description,
+        expense_date: expenseData.expense_date,
+        notes: expenseData.notes || null,
+      };
+
+      // Keep explicit receipt_url if provided. Ignore receipt_file here to avoid unknown column errors.
+      if (expenseData.receipt_url) {
+        payload.receipt_url = expenseData.receipt_url;
+      }
+
+      const { error } = await supabase
         .from('expenses')
-        .insert([{
-          amount: expenseData.amount,
-          category: expenseData.category,
-          description: expenseData.description,
-          expense_date: expenseData.expense_date,
-          notes: expenseData.notes,
-          receipt_url: expenseData.receipt_url || null
-        }]);
+        .insert([payload]);
 
       if (error) throw error;
 
