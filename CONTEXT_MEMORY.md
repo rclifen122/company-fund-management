@@ -5,6 +5,7 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 ## Purpose
 - Company internal fund management web app with Vietnamese UI and business logic.
 - Tracks employee contributions, expenses, dashboards, and bill-sharing flows.
+- Includes a reimbursement workflow to track non-fund member contributions to expenses.
 
 ## Tech Stack
 - Frontend: React 18 + Vite, React Router, Tailwind CSS, lucide-react icons, Recharts.
@@ -17,121 +18,47 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 - `preview`: Vite preview.
 - `lint`: ESLint.
 
-## Environment
-- `.env` keys:
-  - `VITE_SUPABASE_URL`
-  - `VITE_SUPABASE_ANON_KEY`
-  - `VITE_DEV_MODE` (when `true`, pages use mock data)
-- Local dev: `.env` present with placeholders and `VITE_DEV_MODE=true`.
-- Supabase client (`src/supabase.js`): `persistSession: false`.
-
-## Repo Structure (high-level)
-- `src/`
-  - `main.jsx`, `App.jsx` (routes + entry)
-  - `supabase.js` (client init)
-  - `components/` (Layout, ProtectedRoute, StatCard, EmployeeModal, PaymentModal, ExpenseModal)
-  - `pages/` (Home, Employees, Fund Collection, Expenses, Settings, Bill Sharing, Auth)
-- `migrations/` (SQL for bill sharing + schema changes)
-- `public/` (static assets)
-- Root configs: `vite.config.js`, `tailwind.config.js`, `postcss.config.js`, `eslint.config.js`
-
-## Routing
-- Public: `/login`, `/signup`, `/forgot-password`, `/update-password`.
-- Protected: `/`, `/employees`, `/fund-collection`, `/expenses`, `/settings`, `/bill-sharing`.
-- Note: `ProtectedRoute` currently bypasses auth (intended for internal/demo use).
+## Reimbursement Workflow
+1.  An `expense` is paid out from the central company fund.
+2.  A `bill_sharing` event is created to associate this expense with participants.
+3.  Non-fund members pay their share directly (`direct` payments).
+4.  A user clicks the **Finalize** button on the `bill_sharing` event in the UI.
+5.  This triggers the `finalize_bill_sharing` database function, which calculates the total amount reimbursed from direct payers.
+6.  The function then proportionally distributes and updates the `amount_reimbursed` field on the original, linked `expense` records.
+7.  The `ExpensesPage` UI is updated to show the original amount, the amount reimbursed, and the final net cost, providing a clear view of the fund's actual expenditure.
 
 ## Pages - Key Behaviors
-- Home (`HomePage.jsx`)
-  - Dashboard metrics, 12-month chart, expenses pie, recent activities.
-  - Dev-mode mock data; otherwise aggregates from Supabase with careful total logic (avoid double counting; includes employees who left).
-- Fund Collection (`FundCollectionPage.jsx`)
-  - Lists payments, filters, status badges; add payments via `PaymentModal`.
-  - Computes total using: for leavers use `employees.total_paid`; for active, sum `fund_payments` (avoid double count).
-  - Realtime: subscribes to `employees` and `fund_payments` changes and refreshes state (no hard reloads).
-- Employees (`EmployeesPage.jsx`)
-  - List, search, filters; CRUD via `EmployeeModal` (demo-mode inserts are mocked).
-  - Derives current-month status from payments and dates.
-  - Realtime: subscribes to `employees` and `fund_payments`; updates list without hard reloads.
-- Expenses (`ExpensesPage.jsx`)
-  - List, search, filters, sorting; CRUD via `ExpenseModal` (demo-mode mocked).
-  - Total/current-month/category breakdowns; also computes fund total similar to other pages.
-- Bill Sharing (`BillSharingPage.jsx`)
-  - Select expenses/employees/birthday people; compute fund vs direct payments.
-  - Participants list supports filters: All / Fund / Direct / Active; employees loaded from DB, sorted by name, using `participates_in_fund`.
-  - Realtime: subscribes to `employees` and `expenses` to refresh lists live.
-  - Persists sharing and participant records to Supabase when configured.
-- Auth pages (`LoginPage.jsx`, `SignUpPage.jsx`, `ForgotPasswordPage.jsx`, `UpdatePasswordPage.jsx`)
-  - Login simulates success in dev-mode; otherwise uses Supabase Auth flows.
-
-## Components
-- `Layout.jsx`: Responsive sidebar + header; navigation and sign-out.
-- `ProtectedRoute.jsx`: Pass-through wrapper (no auth enforcement currently).
-- `StatCard.jsx`: Simple KPI card.
-- `EmployeeModal.jsx` / `ExpenseModal.jsx` / `PaymentModal.jsx`: Validated forms; date/amount helpers; Vietnamese labels.
+- **Fund Collection (`FundCollectionPage.jsx`)**
+  - Lists payments and calculates totals for **fund-participating employees only**.
+- **Expenses (`ExpensesPage.jsx`)**
+  - Displays all expenses with columns for **Total Amount**, **Amount Reimbursed**, and **Net Cost**.
+  - Shows the `sharing_status` of an expense (e.g., `Not Shared`, `Partially Reimbursed`).
+- **Bill Sharing (`BillSharingPage.jsx`)**
+  - Allows selection of multiple birthday people with updated calculation logic.
+  - Users can **Finalize** a sharing event, which triggers the reimbursement workflow.
 
 ## Data Model (Supabase/Postgres)
-- Employees `employees`
-  - Fields: `id`, `name`, `email`, `phone`, `department`, `monthly_contribution_amount`, `total_paid`, `join_date`, `leave_date`, `status`, timestamps.
-  - Added: `participates_in_fund BOOLEAN DEFAULT TRUE` (via migration).
-- Fund Payments `fund_payments`
-  - Fields: `id`, `employee_id` (FK), `amount`, `payment_date`, `months_covered TEXT[]`, `payment_method`, `notes`, `recorded_by`, timestamps.
-- Expenses `expenses`
-  - Fields: `id`, `amount`, `category`, `description`, `expense_date`, `receipt_url`, `notes`, `created_by`, timestamps.
-- Profiles `profiles`
-  - Fields: `id` (FK to `auth.users`), `email`, `full_name`, `role`, `company_name`, `phone`, timestamps.
-- Views/Functions/Triggers (per README)
-  - Trigger `update_employee_total_paid` on `fund_payments` to adjust `employees.total_paid` on insert/update/delete.
-  - View `fund_summary` provides `total_collected`, `total_spent`, `current_balance`, `total_employees`.
-  - Indexes on common query fields.
-- Bill Sharing (migration `V2__create_bill_sharing_tables.sql`)
-  - `bill_sharing`: `id`, `total_amount`, `sharing_date`, `status`, `created_at`.
-  - `bill_sharing_expenses`: composite PK, links expenses to sharings with `amount`.
-  - `bill_sharing_participants`: `id`, `bill_sharing_id`, `employee_id`, `amount_owed`, `is_birthday_person`, `payment_method` ('fund'|'direct'), `payment_status` ('pending'|'paid'), `payment_date`.
+- **Employees (`employees`)**
+  - `participates_in_fund` (boolean): Controls if an employee is part of the fund. Used to filter views in Fund Collection.
+- **Non-Fund Members (`non_fund_members`)**
+  - New table to explicitly manage employees not in the fund.
+  - Synced with `employees.participates_in_fund` via database triggers.
+- **Expenses (`expenses`)**
+  - `amount_reimbursed` (decimal): Stores the total amount reimbursed for this expense from bill sharing. Defaults to 0.
+  - `net_amount` (generated decimal): Automatically calculated as `amount - amount_reimbursed`.
+  - `sharing_status` (text): Tracks the reimbursement status (e.g., `not_shared`, `partially_reimbursed`, `fully_reimbursed`).
+- **Bill Sharing (`bill_sharing`)**
+  - `status` (text): Used in the finalization workflow (e.g., `pending`, `finalized`).
 
-## Realtime
-- Migration `V3__enable_realtime.sql` adds tables to `supabase_realtime` publication:
-  - `employees`, `fund_payments`, `expenses`, `bill_sharing`, `bill_sharing_expenses`, `bill_sharing_participants`.
-- `REPLICA IDENTITY FULL` set on these tables so UPDATE/DELETE events include `old` rows.
-- Frontend subscriptions:
-  - Employees: `employees` + `fund_payments`.
-  - Fund Collection: `employees` + `fund_payments`.
-  - Expenses: `expenses` (pre-existing).
-  - Bill Sharing: `employees` + `expenses`.
+- **Database Functions**
+  - `finalize_bill_sharing(sharing_id)`: A key function that calculates reimbursements from a sharing event and applies them proportionally to the original expenses. It updates the `amount_reimbursed` and `sharing_status` on the `expenses` table and sets the `bill_sharing` status to `finalized`.
 
 ## Calculations - Notable Rules
-- Avoid double counting:
-  - Employees who left: trust `employees.total_paid`.
-  - Active employees: sum `fund_payments` (excluding leaver IDs).
-- Monthly status:
-  - If current month in `months_covered` -> `paid`.
-  - Else if last payment >45 days ago -> `overdue`; else `pending`.
-  - Employees with `leave_date` considered `completed` in dashboard context.
-
-## Configuration Notes
-- Vite alias ensures `react-router-dom` resolves consistently.
-- Tailwind content globs include `index.html` and all files under `src`.
-- Styling baseline in `src/index.css`; extra `.currency-vnd` utility.
- - Vercel: `vercel.json` rewrites `/(.*)` -> `/` to prevent deep-route reload errors.
-
-## Known Issues / Observations
-- Vietnamese diacritics appear mojibake in several JSX/MD files (likely encoding mismatch). Consider normalizing to UTF-8.
-- `ProtectedRoute` skips auth; enable real checks when moving beyond internal/demo use.
-- `persistSession: false` means auth state is ephemeral; adjust for production.
-
-## Data Seeds / Lists
-- `full_employees_list.csv`: Names + note column (not directly wired in UI yet).
-
-## Current Local Setup
-- `.env` present with placeholder Supabase URL and key; `VITE_DEV_MODE=true` so mock data paths are active.
-
-## Quick Tasks Backlog (suggested)
-- Fix encoding of Vietnamese strings across repo.
-- Toggle `ProtectedRoute` to enforce auth when Supabase is configured.
-- Implement production session persistence.
-- Wire file uploads for receipts to Supabase storage.
-- Add unit/integration tests around fund and bill-sharing calculations.
-- Ensure RLS policies align with admin-only usage patterns.
+- **Bill Sharing (Multi-Birthday Logic)**:
+  - If `N` people participate and `B` people have a birthday:
+  - A non-birthday person pays: `Total Cost / (N - 1)`.
+  - A birthday person pays: `(Total Cost / (N - 1)) * (B - 1) / B`.
+  - This handles all cases, including 0 or 1 birthday person.
 
 ---
-Last updated: commit time of this file.
-
+*This is a living document. Last updated to reflect the reimbursement and finalization features.*
