@@ -123,16 +123,18 @@ const BillSharingPage = () => {
         if (linkErr) throw linkErr;
       }
 
-      // Create participant rows (explicit ids)
-      const participantsToCreate = paymentBreakdown.map(p => ({
-        id: genId(),
-        bill_sharing_id: sharingId,
-        employee_id: p.id,
-        amount_owed: Number(p.amountOwed || 0),
-        is_birthday_person: birthdayPeople.has(p.id),
-        payment_method: p.paymentMethod,
-        payment_status: (p.amountOwed || 0) === 0 ? 'paid' : 'pending',
-      }));
+      // Create participant rows for DIRECT payers only (fund payers are auto-paid and not tracked here)
+      const participantsToCreate = paymentBreakdown
+        .filter(p => p.paymentMethod === 'direct' && Number(p.amountOwed || 0) > 0)
+        .map(p => ({
+          id: genId(),
+          bill_sharing_id: sharingId,
+          employee_id: p.id,
+          amount_owed: Number(p.amountOwed || 0),
+          is_birthday_person: birthdayPeople.has(p.id),
+          payment_method: 'direct',
+          payment_status: 'pending',
+        }));
       if (participantsToCreate.length > 0) {
         const { error: partErr } = await supabase.from('bill_sharing_participants').insert(participantsToCreate);
         if (partErr) throw partErr;
@@ -150,7 +152,28 @@ const BillSharingPage = () => {
     }
   };
 
-  const handlePaymentStatusToggle = async (participantId, currentStatus) => {
+  // Auto-finalize a sharing when all direct participants are paid
+  const finalizeIfAllDirectPaid = async (sharingId) => {
+    try {
+      const { data: participants, error } = await supabase
+        .from('bill_sharing_participants')
+        .select('id, payment_status, payment_method')
+        .eq('bill_sharing_id', sharingId);
+      if (error) throw error;
+
+      const directs = (participants || []).filter(p => p.payment_method === 'direct');
+      const allPaid = directs.length === 0 || directs.every(p => p.payment_status === 'paid');
+      if (!allPaid) return;
+
+      const { error: rpcError } = await supabase.rpc('finalize_bill_sharing', { sharing_id_input: sharingId });
+      if (rpcError) throw rpcError;
+      await fetchSharingHistory();
+    } catch (e) {
+      console.error('Auto finalize failed:', e);
+    }
+  };
+
+  const handlePaymentStatusToggle = async (participantId, currentStatus, sharingId) => {
     const newStatus = currentStatus === 'paid' ? 'pending' : 'paid';
     const updatedHistory = sharingHistory.map(sharing => ({
       ...sharing,
@@ -167,6 +190,40 @@ const BillSharingPage = () => {
       console.error('Error updating payment status:', error);
       setSharingHistory(sharingHistory);
       alert('Failed to update payment status.');
+    } else if (sharingId) {
+      await finalizeIfAllDirectPaid(sharingId);
+    }
+  };
+
+  const handleDeleteSharing = async (sharingId, status) => {
+    if (status === 'finalized') {
+      alert('Cannot delete a finalized sharing record.');
+      return;
+    }
+    if (!confirm('Delete this sharing record? This will remove its participants and links.')) return;
+    setLoading(true);
+    try {
+      const { error: pErr } = await supabase
+        .from('bill_sharing_participants')
+        .delete()
+        .eq('bill_sharing_id', sharingId);
+      if (pErr) throw pErr;
+      const { error: eErr } = await supabase
+        .from('bill_sharing_expenses')
+        .delete()
+        .eq('bill_sharing_id', sharingId);
+      if (eErr) throw eErr;
+      const { error: sErr } = await supabase
+        .from('bill_sharing')
+        .delete()
+        .eq('id', sharingId);
+      if (sErr) throw sErr;
+      await fetchSharingHistory();
+    } catch (err) {
+      console.error('Error deleting sharing record:', err);
+      alert('Failed to delete sharing: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -351,6 +408,9 @@ const BillSharingPage = () => {
                       <BadgeCheck className="h-4 w-4 mr-2" />
                       {sharing.status === 'finalized' ? 'Finalized' : 'Finalize & Update'}
                     </button>
+                    <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                      Delete
+                    </button>
                   </div>
                 </div>
                 <div className="mt-4">
@@ -362,7 +422,7 @@ const BillSharingPage = () => {
                           <p>{p.employees.name}</p>
                           <p className="text-sm text-gray-600">Owed: {formatVND(p.amount_owed)}</p>
                         </div>
-                        <button onClick={() => handlePaymentStatusToggle(p.id, p.payment_status)} className={`px-3 py-1 text-sm rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}</button>
+                        <button onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.id)} className={`px-3 py-1 text-sm rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}</button>
                       </div>
                     ))}
                   </div>

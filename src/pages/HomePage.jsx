@@ -176,7 +176,6 @@ const HomePage = () => {
         }, 0);
 
         const correctedTotalCollected = totalCollectedFromAllEmployees;
-        const correctedCurrentBalance = correctedTotalCollected - (summaryData?.total_spent || 0);
 
         console.log('HomePage fund calculation:', {
           totalEmployees: allEmployeesData.length,
@@ -202,6 +201,8 @@ const HomePage = () => {
 
         console.log('Expenses response:', expensesResponse);
         const expensesData = expensesResponse.data || [];
+        const totalSpentNet = (expensesData || []).reduce((sum, e) => sum + Number((e.net_amount ?? e.amount) || 0), 0);
+        const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
         
         console.log('Total expenses in database:', expensesData.length);
         if (expensesData.length > 0) {
@@ -271,10 +272,10 @@ const HomePage = () => {
         const completedEmployees = processedEmployees.filter(e => e.current_month_status === 'completed').length;
 
         // Calculate stats - with corrected employee data
-        if (summaryData && employeesData) {
+        if (employeesData) {
           setStats({
             totalCollected: correctedTotalCollected,
-            totalExpenses: Number(summaryData.total_spent) || 0,
+            totalExpenses: totalSpentNet,
             currentBalance: correctedCurrentBalance,
             totalEmployees: activeEmployees.length, // Only active employees
             paidThisMonth: paidEmployees,
@@ -285,7 +286,7 @@ const HomePage = () => {
             collectionRate: activeEmployees.length > 0 ? 
               (paidEmployees / activeEmployees.length) * 100 : 0,
             expenseRate: correctedTotalCollected > 0 ? 
-              (summaryData.total_spent / correctedTotalCollected) * 100 : 0,
+              (totalSpentNet / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2
           });
         }
@@ -323,7 +324,7 @@ const HomePage = () => {
             }
           }).reduce((sum, p) => sum + Number(p.amount || 0), 0);
           
-          // Calculate monthly expenses from expense_date ONLY
+          // Calculate monthly expenses from expense_date ONLY (use net_amount when available)
           const monthExpenses = (expensesData || []).filter(e => {
             if (!e.expense_date) return false;
             try {
@@ -331,14 +332,14 @@ const HomePage = () => {
               const matches = expenseDate.getMonth() === targetMonth && 
                             expenseDate.getFullYear() === targetYear;
               if (matches) {
-                console.log(`Found expense for ${monthKey}:`, e.amount, 'on', e.expense_date);
+                console.log(`Found expense for ${monthKey}:`, (e.net_amount ?? e.amount), 'on', e.expense_date);
               }
               return matches;
             } catch (error) {
               console.warn('Error parsing expense date:', e.expense_date, error);
               return false;
             }
-          }).reduce((sum, e) => sum + Number(e.amount || 0), 0);
+          }).reduce((sum, e) => sum + Number((e.net_amount ?? e.amount) || 0), 0);
 
           console.log(`=== ${monthKey} SUMMARY ===`);
           console.log(`Payments found: ${(allPaymentsData || []).filter(p => {
@@ -373,7 +374,7 @@ const HomePage = () => {
         const categoryData = (expensesData || []).reduce((acc, expense) => {
           if (!expense) return acc;
           const category = expense.category || 'other';
-          const amount = Number(expense.amount || 0);
+          const amount = Number((expense.net_amount ?? expense.amount) || 0);
           acc[category] = (acc[category] || 0) + amount;
           return acc;
         }, {});
