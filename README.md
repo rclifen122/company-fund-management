@@ -249,6 +249,32 @@ CREATE POLICY "Admin can view all expenses" ON expenses FOR ALL USING (true);
 CREATE POLICY "Admin can view profile" ON profiles FOR ALL USING (auth.uid() = id);
 ```
 
+## Bill Sharing Workflow
+
+The Bill Sharing feature lets you split selected expenses among employees, collect money from non‑fund participants, and reimburse the original expenses proportionally.
+
+- Create Sharing
+  - Select one or more expenses and the participating employees.
+  - Birthday logic: supports single or multiple birthday people (birthday people do not pay for themselves; see CONTEXT_MEMORY for details).
+  - Fund vs Direct: employees who participate in the fund are treated as “auto paid from fund” and are not tracked as participants. Only direct payers are saved as `bill_sharing_participants` with `payment_method = 'direct'`.
+
+- Collect Payments
+  - Mark each direct participant as Paid once they pay.
+  - When all direct payers are paid, the app automatically finalizes the sharing.
+
+- Finalize & Reimburse
+  - Finalization runs the `finalize_bill_sharing(sharing_id_input)` function.
+  - It sums all Paid direct contributions and distributes that amount proportionally across the linked expenses, updating `expenses.amount_reimbursed` and `expenses.sharing_status`.
+  - The dashboard, monthly chart, and category breakdown all use the expense `net_amount` (amount − amount_reimbursed), so reimbursements effectively flow back to the fund.
+
+- Delete Sharing
+  - You can delete a sharing record (with its participants and expense links) only if it is not finalized.
+
+- Schema Notes
+  - Tables: `bill_sharing`, `bill_sharing_expenses`, `bill_sharing_participants` with foreign keys and unique constraints.
+  - RPC: `finalize_bill_sharing(sharing_id_input uuid)` applies reimbursements and sets sharing status to `finalized`.
+  - A full, idempotent migration is included at `db/migrations/2025-09-08_bill_sharing_integrity.sql`.
+
 #### 3.5 Insert Sample Data (Optional)
 
 ```sql
