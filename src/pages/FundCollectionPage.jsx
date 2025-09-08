@@ -817,8 +817,20 @@ const FundCollectionPage = () => {
                       )}
                     </td>
                   </tr>
-                ))}
+                ))
+              }
               </tbody>
+              <tfoot className="bg-gray-100">
+                <tr>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900" colSpan="3">
+                    Total
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                    {formatVND(filteredEmployees.reduce((sum, e) => sum + e.total_paid, 0))}
+                  </td>
+                  <td className="px-6 py-4" colSpan="3"></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>

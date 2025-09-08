@@ -175,7 +175,7 @@ const HomePage = () => {
         // Calculate correct total fund collection using consistent approach
         // Since employee.total_paid is updated by triggers when payments are made,
         // we should use total_paid for ALL employees (both active and who left)
-        const totalCollectedFromAllEmployees = allEmployeesData.reduce((sum, employee) => {
+        const totalCollectedFromAllEmployees = allEmployeesData.filter(e => e.participates_in_fund).reduce((sum, employee) => {
           return sum + (employee.total_paid || 0);
         }, 0);
 

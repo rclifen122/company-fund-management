@@ -398,7 +398,7 @@ const EmployeesPage = () => {
   });
 
   const totalEmployees = employees.filter(e => e.status === 'active').length;
-  const totalCollected = employees.reduce((sum, e) => sum + e.total_paid, 0);
+  const totalCollected = employees.filter(e => e.participates_in_fund).reduce((sum, e) => sum + e.total_paid, 0);
   const paidThisMonth = employees.filter(e => e.current_month_status === 'paid').length;
   const overdueCount = employees.filter(e => e.current_month_status === 'overdue').length;
 
