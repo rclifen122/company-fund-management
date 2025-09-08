@@ -196,29 +196,34 @@ const BillSharingPage = () => {
   };
 
   const handleDeleteSharing = async (sharingId, status) => {
-    if (status === 'finalized') {
-      alert('Cannot delete a finalized sharing record.');
-      return;
-    }
-    if (!confirm('Delete this sharing record? This will remove its participants and links.')) return;
+    const msg = status === 'finalized'
+      ? 'This will rollback reimbursements applied by this sharing and delete it. Continue?'
+      : 'Delete this sharing record? This will remove its participants and links.';
+    if (!confirm(msg)) return;
     setLoading(true);
     try {
-      const { error: pErr } = await supabase
-        .from('bill_sharing_participants')
-        .delete()
-        .eq('bill_sharing_id', sharingId);
-      if (pErr) throw pErr;
-      const { error: eErr } = await supabase
-        .from('bill_sharing_expenses')
-        .delete()
-        .eq('bill_sharing_id', sharingId);
-      if (eErr) throw eErr;
-      const { error: sErr } = await supabase
-        .from('bill_sharing')
-        .delete()
-        .eq('id', sharingId);
-      if (sErr) throw sErr;
+      if (status === 'finalized') {
+        const { error: rpcErr } = await supabase.rpc('delete_bill_sharing', { sharing_id_input: sharingId });
+        if (rpcErr) throw rpcErr;
+      } else {
+        const { error: pErr } = await supabase
+          .from('bill_sharing_participants')
+          .delete()
+          .eq('bill_sharing_id', sharingId);
+        if (pErr) throw pErr;
+        const { error: eErr } = await supabase
+          .from('bill_sharing_expenses')
+          .delete()
+          .eq('bill_sharing_id', sharingId);
+        if (eErr) throw eErr;
+        const { error: sErr } = await supabase
+          .from('bill_sharing')
+          .delete()
+          .eq('id', sharingId);
+        if (sErr) throw sErr;
+      }
       await fetchSharingHistory();
+      alert('Sharing deleted successfully.');
     } catch (err) {
       console.error('Error deleting sharing record:', err);
       alert('Failed to delete sharing: ' + err.message);
