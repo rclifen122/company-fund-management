@@ -39,7 +39,9 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - Allows selection of multiple birthday people with updated calculation logic.
   - Only direct payers are persisted as participants; fund payers are auto-paid.
   - Auto-finalizes when all direct payers are Paid (or manual finalize), applying reimbursements to expenses.
-  - Pending sharings can be deleted; finalized sharings are protected from deletion.
+  - Deletion:
+    - Pending sharings delete participants + links + sharing.
+    - Finalized sharings call `delete_bill_sharing` to rollback reimbursements then delete rows.
 
 ## Data Model (Supabase/Postgres)
 - **Employees (`employees`)**
@@ -55,7 +57,8 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - `status` (text): Used in the finalization workflow (e.g., `pending`, `finalized`).
 
 - **Database Functions**
-  - `finalize_bill_sharing(sharing_id)`: Sums Paid direct contributions, distributes proportionally to linked expenses, updates `amount_reimbursed` and `sharing_status`, then marks sharing `finalized`.
+  - `finalize_bill_sharing(sharing_id)`: SECURITY DEFINER. Sums Paid direct contributions, distributes proportionally to linked expenses, updates `amount_reimbursed` and `sharing_status`, then marks sharing `finalized`.
+  - `delete_bill_sharing(sharing_id)`: SECURITY DEFINER. If finalized, subtracts proportional reimbursements, updates `sharing_status`, then deletes participants, links, and sharing.
 
 ## Calculations - Notable Rules
 - **Bill Sharing (Multi-Birthday Logic)**:

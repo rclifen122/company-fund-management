@@ -268,12 +268,21 @@ The Bill Sharing feature lets you split selected expenses among employees, colle
   - The dashboard, monthly chart, and category breakdown all use the expense `net_amount` (amount − amount_reimbursed), so reimbursements effectively flow back to the fund.
 
 - Delete Sharing
-  - You can delete a sharing record (with its participants and expense links) only if it is not finalized.
+  - Pending sharings can be deleted directly (participants + links are removed).
+  - Finalized sharings can be deleted via rollback: the app calls `delete_bill_sharing(sharing_id_input)` which subtracts the previously applied reimbursements from linked expenses and then deletes the sharing and its children.
 
 - Schema Notes
   - Tables: `bill_sharing`, `bill_sharing_expenses`, `bill_sharing_participants` with foreign keys and unique constraints.
-  - RPC: `finalize_bill_sharing(sharing_id_input uuid)` applies reimbursements and sets sharing status to `finalized`.
-  - A full, idempotent migration is included at `db/migrations/2025-09-08_bill_sharing_integrity.sql`.
+  - RPCs:
+    - `finalize_bill_sharing(sharing_id_input uuid)` applies reimbursements and sets sharing to `finalized`.
+    - `delete_bill_sharing(sharing_id_input uuid)` rolls back reimbursements (if finalized) and deletes the sharing and its links.
+  - Migrations:
+    - `db/migrations/2025-09-08_bill_sharing_integrity.sql`
+    - `db/migrations/2025-09-08b_bill_sharing_rollback_and_security.sql`
+
+### Permissions
+- The finalize/delete RPCs are defined as `SECURITY DEFINER` and grant `EXECUTE` to app roles so they can update `expenses` under RLS.
+- A permissive RLS policy on `public.expenses` is included in the migration for admin usage. Tighten to your auth model as needed.
 
 #### 3.5 Insert Sample Data (Optional)
 
