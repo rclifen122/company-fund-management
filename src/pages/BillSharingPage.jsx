@@ -94,7 +94,61 @@ const BillSharingPage = () => {
     setBirthdayPeople(newSelection);
   };
 
-  const handleCreateSharing = async () => { /* ... implementation needed ... */ };
+  const handleCreateSharing = async () => {
+    setLoading(true);
+    try {
+      // Generate IDs for tables that don't have default UUIDs
+      const genId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`);
+      const sharingId = genId();
+
+      // Insert main sharing record (explicit id)
+      const { error: sharingError } = await supabase
+        .from('bill_sharing')
+        .insert({ 
+          id: sharingId,
+          total_amount: Number(totalAmount || 0), 
+          sharing_date: new Date().toISOString().split('T')[0], 
+          status: 'pending' 
+        });
+      if (sharingError) throw sharingError;
+
+      // Link selected expenses
+      const expensesToLink = Array.from(selectedExpenses).map(expenseId => ({
+        bill_sharing_id: sharingId,
+        expense_id: expenseId,
+        amount: Number(expenses.find(e => e.id === expenseId)?.amount || 0),
+      }));
+      if (expensesToLink.length > 0) {
+        const { error: linkErr } = await supabase.from('bill_sharing_expenses').insert(expensesToLink);
+        if (linkErr) throw linkErr;
+      }
+
+      // Create participant rows (explicit ids)
+      const participantsToCreate = paymentBreakdown.map(p => ({
+        id: genId(),
+        bill_sharing_id: sharingId,
+        employee_id: p.id,
+        amount_owed: Number(p.amountOwed || 0),
+        is_birthday_person: birthdayPeople.has(p.id),
+        payment_method: p.paymentMethod,
+        payment_status: (p.amountOwed || 0) === 0 ? 'paid' : 'pending',
+      }));
+      if (participantsToCreate.length > 0) {
+        const { error: partErr } = await supabase.from('bill_sharing_participants').insert(participantsToCreate);
+        if (partErr) throw partErr;
+      }
+
+      alert('Bill sharing record created successfully!');
+      setSelectedExpenses(new Set());
+      fetchSharingHistory();
+
+    } catch (error) {
+      console.error('Error creating sharing record:', error);
+      alert('Error creating sharing record: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePaymentStatusToggle = async (participantId, currentStatus) => {
     const newStatus = currentStatus === 'paid' ? 'pending' : 'paid';
