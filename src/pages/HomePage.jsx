@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import PaymentModal from '../components/PaymentModal';
@@ -38,8 +39,25 @@ const HomePage = () => {
   const [expensesByCategory, setExpensesByCategory] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const navigate = useNavigate();
+
+  if (employees.length === 0) {
+    return (
+      <Layout>
+        <div className="text-center py-12">
+          <div className="text-gray-400 text-lg">No employees found</div>
+          <p className="text-gray-500 mt-2">Please add employees to see the dashboard.</p>
+          <button
+            onClick={() => navigate('/employees')}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Employee
+          </button>
+        </div>
+      </Layout>
+    );
+  }
 
   // Fetch real data from Supabase
   useEffect(() => {
@@ -149,8 +167,8 @@ const HomePage = () => {
         const allPaymentsData = allPaymentsForChartResponse.data || [];
         const recentPaymentsData = recentPaymentsResponse.data || [];
         
-        console.log('=== DATA SUMMARY ===');
-        console.log('Total payments in database:', allPaymentsData.length);
+        console.log('=== RAW DATA SUMMARY ===');
+        console.log('Total payments in database:', allPaymentsData.length, allPaymentsData);
         console.log('Date range of payments:', {
           earliest: allPaymentsData.length > 0 ? Math.min(...allPaymentsData.map(p => new Date(p.payment_date).getTime())) : 'none',
           latest: allPaymentsData.length > 0 ? Math.max(...allPaymentsData.map(p => new Date(p.payment_date).getTime())) : 'none'
@@ -167,6 +185,9 @@ const HomePage = () => {
         const summaryData = summaryResponse.data;
         const allEmployeesData = allEmployeesResponse.data || [];
         const allPaymentsForSummaryData = allPaymentsForSummaryResponse.data || [];
+
+        console.log('Raw employees data:', allEmployeesData);
+        console.log('Raw payments for summary data:', allPaymentsForSummaryData);
 
         // Calculate correct total fund collection using consistent approach
         // Since employee.total_paid is updated by triggers when payments are made,
@@ -200,6 +221,7 @@ const HomePage = () => {
           employeesWithPayments: allEmployeesData.filter(e => e.total_paid > 0).length,
           totalCollectedFromAllEmployees,
           totalSpent: summaryData?.total_spent || 0,
+          totalSpentNet,
           correctedCurrentBalance,
           originalFromView: summaryData?.total_collected
         });
@@ -273,7 +295,7 @@ const HomePage = () => {
 
         // Calculate stats - with corrected employee data
         if (employeesData) {
-          setStats({
+          const newStats = {
             totalCollected: correctedTotalCollected,
             totalExpenses: totalSpentNet,
             currentBalance: correctedCurrentBalance,
@@ -288,7 +310,9 @@ const HomePage = () => {
             expenseRate: correctedTotalCollected > 0 ? 
               (totalSpentNet / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2
-          });
+          };
+          console.log('Setting new stats:', newStats);
+          setStats(newStats);
         }
 
         // Set employees for payment modal
@@ -368,6 +392,7 @@ const HomePage = () => {
             expenses: monthExpenses   // Only use actual expenses from expenses table
           });
         }
+        console.log('Processed monthly chart data:', monthlyChartData);
         setMonthlyData(monthlyChartData);
 
         // Process expense categories - with null safety
@@ -398,6 +423,7 @@ const HomePage = () => {
           value: value,
           color: categoryColors[key] || '#6B7280'
         }));
+        console.log('Processed expense category data:', categoryChartData);
         setExpensesByCategory(categoryChartData);
 
                 // Process recent activities - with null safety
@@ -574,14 +600,14 @@ const HomePage = () => {
             </div>
             <div className="flex space-x-3">
               <button 
-                onClick={() => setShowPaymentModal(true)}
+                onClick={() => navigate('/fund-collection')}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nhập Quỹ
               </button>
               <button 
-                onClick={() => setShowExpenseModal(true)}
+                onClick={() => navigate('/expenses')}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -860,19 +886,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        {/* Modals */}
-        <PaymentModal
-          isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
-          employees={employees}
-          onSubmit={handlePaymentSubmit}
-        />
-
-        <ExpenseModal
-          isOpen={showExpenseModal}
-          onClose={() => setShowExpenseModal(false)}
-          onSubmit={handleExpenseSubmit}
-        />
+        
       </div>
     </Layout>
   );
