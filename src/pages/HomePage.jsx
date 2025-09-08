@@ -177,15 +177,6 @@ const HomePage = () => {
 
         const correctedTotalCollected = totalCollectedFromAllEmployees;
 
-        console.log('HomePage fund calculation:', {
-          totalEmployees: allEmployeesData.length,
-          employeesWithPayments: allEmployeesData.filter(e => e.total_paid > 0).length,
-          totalCollectedFromAllEmployees,
-          totalSpent: summaryData?.total_spent || 0,
-          correctedCurrentBalance,
-          originalFromView: summaryData?.total_collected
-        });
-
         // Get ALL employees (including those who left) for proper status calculation
         const employeesResponse = await supabase
           .from('employees')
@@ -203,6 +194,15 @@ const HomePage = () => {
         const expensesData = expensesResponse.data || [];
         const totalSpentNet = (expensesData || []).reduce((sum, e) => sum + Number((e.net_amount ?? e.amount) || 0), 0);
         const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
+
+        console.log('HomePage fund calculation:', {
+          totalEmployees: allEmployeesData.length,
+          employeesWithPayments: allEmployeesData.filter(e => e.total_paid > 0).length,
+          totalCollectedFromAllEmployees,
+          totalSpent: summaryData?.total_spent || 0,
+          correctedCurrentBalance,
+          originalFromView: summaryData?.total_collected
+        });
         
         console.log('Total expenses in database:', expensesData.length);
         if (expensesData.length > 0) {

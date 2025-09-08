@@ -2,6 +2,16 @@
 
 Snapshot of repository structure, tech stack, runtime behavior, and data model to accelerate future work. Keep updated as changes land.
 
+## Current Status (2025-09-08)
+- Dashboard metrics incorrect / dashboard not updating.
+  - Root cause identified: `HomePage.jsx` logs `correctedCurrentBalance` before it is defined, which can cause a runtime ReferenceError and push the dashboard into error fallback (mock data). Fix: compute `correctedCurrentBalance` before using it in logs or move the log after the variable is declared.
+  - Secondary cause: reimbursements not applied because bill sharing finalize/delete RPCs were not available, so `expenses.amount_reimbursed` and `net_amount` never update, leading to stale totals.
+- Bill Sharing create/delete “does nothing”.
+  - Cause: missing/uncached RPCs in Supabase (PostgREST schema cache) for `public.delete_bill_sharing(sharing_id_input uuid)` and finalize.
+  - Action: added `db/sql/repair_bill_sharing_rpcs.sql` which recreates both RPCs with SECURITY DEFINER, grants `EXECUTE` to `anon, authenticated`, and adds a permissive expenses policy. After running, reset API cache in Supabase Settings → API.
+  - Pending deletion uses direct table deletes (no RPC); if nothing happens, ensure RLS policies exist on `bill_sharing*` tables per migrations and that the migrations were applied.
+- Environment check: ensure not in demo/dev mode if expecting real data (`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` set, and `VITE_DEV_MODE` is not `true`).
+
 ## Purpose
 - Company internal fund management web app with Vietnamese UI and business logic.
 - Tracks employee contributions, expenses, dashboards, and bill-sharing flows.
@@ -74,4 +84,4 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 - Finalized sharings are not deletable in the UI to preserve accounting history.
 
 ---
-*This is a living document. Last updated: direct-only participants, auto-finalize, delete rules, and net expense usage.*
+*This is a living document. Last updated: dashboard bug (early variable access), RPC repair script path, and steps to refresh API cache; plus direct-only participants, auto-finalize, delete rules, and net expense usage.*
