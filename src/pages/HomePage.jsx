@@ -39,30 +39,13 @@ const HomePage = () => {
   const [expensesByCategory, setExpensesByCategory] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  if (employees.length === 0) {
-    return (
-      <Layout>
-        <div className="text-center py-12">
-          <div className="text-gray-400 text-lg">No employees found</div>
-          <p className="text-gray-500 mt-2">Please add employees to see the dashboard.</p>
-          <button
-            onClick={() => navigate('/employees')}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Employee
-          </button>
-        </div>
-      </Layout>
-    );
-  }
-
-  // Fetch real data from Supabase
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
+        setLoading(true);
         // Check if we're in development mode
         const isDevelopmentMode = 
           !import.meta.env.VITE_SUPABASE_URL || 
@@ -470,9 +453,11 @@ const HomePage = () => {
         });
 
         setRecentActivities(activities);
+        setLoading(false);
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        setLoading(false);
         // Fall back to mock data on error
         setStats({
           totalCollected: 1000000,
@@ -491,6 +476,16 @@ const HomePage = () => {
 
     fetchDashboardData();
   }, []);
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   const formatVND = (value) => {
     return new Intl.NumberFormat('vi-VN', {
