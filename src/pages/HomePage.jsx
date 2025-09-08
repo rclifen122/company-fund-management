@@ -160,7 +160,7 @@ const HomePage = () => {
         // Calculate fund summary manually to avoid database view dependency
         const [summaryResponse, allEmployeesResponse, allPaymentsForSummaryResponse] = await Promise.all([
           supabase.from('fund_summary').select('*').single(),
-          supabase.from('employees').select('id, total_paid, leave_date'),
+          supabase.from('employees').select('id, total_paid, leave_date, participates_in_fund'),
           supabase.from('fund_payments').select('amount, employee_id') // Get all payments for calculation
         ]);
 
