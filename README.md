@@ -7,6 +7,12 @@ A modern, responsive web application for managing company internal funds, built 
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3+-green)
 ![Supabase](https://img.shields.io/badge/Supabase-Backend-orange)
 
+## What's New (2025-09-19)
+
+- Bill Sharing: live breakdown before finalize (Fund Paid, Direct Collected, Direct Outstanding, progress bar), per-participant Fund/Direct badges, expense names (description - category - date) above totals with expand/collapse, Copy expenses to clipboard, Details modal, and toast notifications.
+- Selection UX: filters (All/Fund/Direct) and bulk actions in "Select Participants" and "Select Birthday People" blocks to quickly select or mark shown users.
+- Ops script: ready-to-run SQL to flip an employee to non-fund on the effective date: `db/sql/2025-10-01_mark_duong_anh_thu_non_fund.sql` (uses UUID; includes verification queries).
+
 ## 🚀 Features
 
 ### 📊 Dashboard
@@ -276,9 +282,16 @@ The Bill Sharing feature lets you split selected expenses among employees, colle
   - RPCs:
     - `finalize_bill_sharing(sharing_id_input uuid)` applies reimbursements and sets sharing to `finalized`.
     - `delete_bill_sharing(sharing_id_input uuid)` rolls back reimbursements (if finalized) and deletes the sharing and its links.
-  - Migrations:
+- Migrations:
     - `db/migrations/2025-09-08_bill_sharing_integrity.sql`
     - `db/migrations/2025-09-08b_bill_sharing_rollback_and_security.sql`
+
+### Bill Sharing UI Enhancements (Sept 2025)
+- Sharing cards show Fund Paid, Direct Collected, Direct Outstanding, and a progress bar before finalize.
+- Expense names (description - category - date) appear above totals; expand to view all.
+- Copy expenses to clipboard; Details modal with linked expenses table and fund/direct metrics.
+- Toast notifications for create, delete, finalize, mark Paid/Pending, and copy.
+- Selection filters (All/Fund/Direct) and bulk actions in participant and birthday selection lists.
 
 ### Permissions
 - The finalize/delete RPCs are defined as `SECURITY DEFINER` and grant `EXECUTE` to app roles so they can update `expenses` under RLS.
