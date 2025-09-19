@@ -23,7 +23,7 @@ const BillSharingPage = () => {
       .from('bill_sharing')
       .select(`*,
         bill_sharing_participants (*, employees (name, department)),
-        bill_sharing_expenses (*)
+        bill_sharing_expenses (*, expenses (id, description, category, expense_date, amount))
       `)
       .order('created_at', { ascending: false });
 
@@ -423,8 +423,29 @@ const BillSharingPage = () => {
 
               return (
                 <div key={sharing.id} className="border rounded-lg p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
+                      {/* Linked expense names */}
+                      <div className="text-sm text-gray-800 font-medium">
+                        {(() => {
+                          const items = (sharing.bill_sharing_expenses || [])
+                            .map(e => {
+                              const ex = e?.expenses;
+                              if (!ex?.description) return null;
+                              const dateStr = ex?.expense_date ? new Date(ex.expense_date).toLocaleDateString('vi-VN') : '';
+                              const parts = [ex.description];
+                              if (ex?.category) parts.push(ex.category);
+                              if (dateStr) parts.push(dateStr);
+                              return parts.join(' — ');
+                            })
+                            .filter(Boolean);
+                          if (items.length === 0) return 'Shared Expenses';
+                          const maxShow = 3;
+                          const shown = items.slice(0, maxShow).join(' • ');
+                          const more = items.length > maxShow ? ` +${items.length - maxShow} more` : '';
+                          return shown + more;
+                        })()}
+                      </div>
                       <p className="font-bold text-lg">{formatVND(totalAmount)}</p>
                       <p className="text-sm text-gray-500">{new Date(sharing.sharing_date).toLocaleDateString('vi-VN')}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
