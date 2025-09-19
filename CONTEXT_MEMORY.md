@@ -2,7 +2,7 @@
 
 Snapshot of repository structure, tech stack, runtime behavior, and data model to accelerate future work. Keep updated as changes land.
 
-## Current Status (2025-09-08)
+## Current Status (2025-09-19)
 - Dashboard metrics incorrect / dashboard not updating.
   - Root cause identified: `HomePage.jsx` logs `correctedCurrentBalance` before it is defined, which can cause a runtime ReferenceError and push the dashboard into error fallback (mock data). Fix: compute `correctedCurrentBalance` before using it in logs or move the log after the variable is declared.
   - Secondary cause: reimbursements not applied because bill sharing finalize/delete RPCs were not available, so `expenses.amount_reimbursed` and `net_amount` never update, leading to stale totals.
@@ -11,6 +11,14 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - Action: added `db/sql/repair_bill_sharing_rpcs.sql` which recreates both RPCs with SECURITY DEFINER, grants `EXECUTE` to `anon, authenticated`, and adds a permissive expenses policy. After running, reset API cache in Supabase Settings → API.
   - Pending deletion uses direct table deletes (no RPC); if nothing happens, ensure RLS policies exist on `bill_sharing*` tables per migrations and that the migrations were applied.
 - Environment check: ensure not in demo/dev mode if expecting real data (`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` set, and `VITE_DEV_MODE` is not `true`).
+
+### Bill Sharing UI Enhancements (2025-09-19)
+- Sharing History cards show live breakdown before finalize:
+  - Fund Paid, Direct Collected, Direct Outstanding, and a progress bar.
+  - Per-participant badges (Fund/Direct) and statuses (Paid/Pending).
+- Expense names above total with category and date; expandable list (Show all / Hide).
+- Quick actions: Copy expenses to clipboard; View details modal with linked expenses table and fund/direct metrics.
+- Toast notifications for create, delete, finalize, mark Paid/Pending, and copy actions.
 
 ## Purpose
 - Company internal fund management web app with Vietnamese UI and business logic.
@@ -52,6 +60,10 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - Deletion:
     - Pending sharings delete participants + links + sharing.
     - Finalized sharings call `delete_bill_sharing` to rollback reimbursements then delete rows.
+  - UX Enhancements:
+    - Sharing cards: live Fund/Direct totals, outstanding, progress; copy; details modal; expandable expense list.
+    - Selection lists: Fund/Direct filters and bulk actions (select/clear shown; mark/unmark shown birthdays).
+    - Toasts for user feedback.
 
 ## Data Model (Supabase/Postgres)
 - **Employees (`employees`)**
@@ -70,6 +82,12 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
   - `finalize_bill_sharing(sharing_id)`: SECURITY DEFINER. Sums Paid direct contributions, distributes proportionally to linked expenses, updates `amount_reimbursed` and `sharing_status`, then marks sharing `finalized`.
   - `delete_bill_sharing(sharing_id)`: SECURITY DEFINER. If finalized, subtracts proportional reimbursements, updates `sharing_status`, then deletes participants, links, and sharing.
 
+## Ops Notes
+- Non-fund switch script for DƯƠNG ANH THƯ (run on effective date):
+  - Path: `db/sql/2025-10-01_mark_duong_anh_thu_non_fund.sql`
+  - Uses her UUID to upsert into `non_fund_members` and set `employees.participates_in_fund=false`.
+  - Includes verification SELECTs; adjust date/ID to reuse for other employees.
+
 ## Calculations - Notable Rules
 - **Bill Sharing (Multi-Birthday Logic)**:
   - If `N` people participate and `B` people have a birthday:
@@ -84,4 +102,4 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 - Finalized sharings are not deletable in the UI to preserve accounting history.
 
 ---
-*This is a living document. Last updated: dashboard bug (early variable access), RPC repair script path, and steps to refresh API cache; plus direct-only participants, auto-finalize, delete rules, and net expense usage.*
+*This is a living document. Last updated: 2025-09-19 — Bill Sharing UI enhancements, toast feedback, filters/bulk actions, and non-fund ops script path.*
