@@ -21,6 +21,10 @@ const BillSharingPage = () => {
   const [detailsSharing, setDetailsSharing] = useState(null);
   const [copyingId, setCopyingId] = useState(null);
   const [toast, setToast] = useState({ show: false, text: '', type: 'success' });
+  const showToast = (text, type = 'success', duration = 2000) => {
+    setToast({ show: true, text, type });
+    setTimeout(() => setToast({ show: false, text: '', type }), duration);
+  };
 
   const fetchSharingHistory = async () => {
     const { data, error } = await supabase
@@ -144,13 +148,13 @@ const BillSharingPage = () => {
         if (partErr) throw partErr;
       }
 
-      alert('Bill sharing record created successfully!');
+      showToast('Sharing created successfully', 'success');
       setSelectedExpenses(new Set());
       fetchSharingHistory();
 
     } catch (error) {
       console.error('Error creating sharing record:', error);
-      alert('Error creating sharing record: ' + error.message);
+      showToast('Failed to create sharing: ' + error.message, 'error', 3000);
     } finally {
       setLoading(false);
     }
@@ -193,8 +197,9 @@ const BillSharingPage = () => {
     if (error) {
       console.error('Error updating payment status:', error);
       setSharingHistory(sharingHistory);
-      alert('Failed to update payment status.');
+      showToast('Failed to update payment status', 'error', 2500);
     } else if (sharingId) {
+      showToast(newStatus === 'paid' ? 'Marked as Paid' : 'Marked as Pending', 'success');
       await finalizeIfAllDirectPaid(sharingId);
     }
   };
@@ -227,10 +232,10 @@ const BillSharingPage = () => {
         if (sErr) throw sErr;
       }
       await fetchSharingHistory();
-      alert('Sharing deleted successfully.');
+      showToast('Sharing deleted successfully', 'success');
     } catch (err) {
       console.error('Error deleting sharing record:', err);
-      alert('Failed to delete sharing: ' + err.message);
+      showToast('Failed to delete sharing: ' + err.message, 'error', 3000);
     } finally {
       setLoading(false);
     }
@@ -292,11 +297,11 @@ const BillSharingPage = () => {
         sharing_id_input: sharingId
       });
       if (error) throw error;
-      alert('Successfully finalized sharing and updated expenses!');
+      showToast('Sharing finalized and expenses updated', 'success');
       fetchSharingHistory();
     } catch (error) {
       console.error('Error finalizing sharing event:', error);
-      alert(`Failed to finalize: ${error.message}`);
+      showToast('Failed to finalize: ' + error.message, 'error', 3000);
     } finally {
       setLoading(false);
     }
