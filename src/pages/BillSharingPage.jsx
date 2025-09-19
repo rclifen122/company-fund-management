@@ -17,6 +17,7 @@ const BillSharingPage = () => {
   const [fundPayment, setFundPayment] = useState(0);
   const [directPayment, setDirectPayment] = useState(0);
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
+  const [expandedSharings, setExpandedSharings] = useState(new Set());
 
   const fetchSharingHistory = async () => {
     const { data, error } = await supabase
@@ -232,6 +233,15 @@ const BillSharingPage = () => {
     }
   };
 
+  const toggleSharingExpand = (sharingId) => {
+    setExpandedSharings(prev => {
+      const next = new Set(prev);
+      if (next.has(sharingId)) next.delete(sharingId);
+      else next.add(sharingId);
+      return next;
+    });
+  };
+
   const handleFinalizeSharing = async (sharingId) => {
     if (!confirm('Are you sure you want to finalize this sharing event? This will update the original expenses and cannot be undone.')) {
       return;
@@ -440,10 +450,40 @@ const BillSharingPage = () => {
                             })
                             .filter(Boolean);
                           if (items.length === 0) return 'Shared Expenses';
+                          const isExpanded = expandedSharings.has(sharing.id);
+                          if (isExpanded) {
+                            return (
+                              <div>
+                                <ul className="list-disc list-inside space-y-0.5 text-gray-800">
+                                  {items.map((text, idx) => (
+                                    <li key={idx}>{text}</li>
+                                  ))}
+                                </ul>
+                                <button
+                                  className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 underline"
+                                  onClick={() => toggleSharingExpand(sharing.id)}
+                                >
+                                  Hide
+                                </button>
+                              </div>
+                            );
+                          }
                           const maxShow = 3;
-                          const shown = items.slice(0, maxShow).join(' • ');
-                          const more = items.length > maxShow ? ` +${items.length - maxShow} more` : '';
-                          return shown + more;
+                          const shownItems = items.slice(0, maxShow);
+                          const moreCount = items.length - shownItems.length;
+                          return (
+                            <span>
+                              {shownItems.join(' • ')}
+                              {moreCount > 0 && (
+                                <button
+                                  className="ml-2 text-xs text-indigo-600 hover:text-indigo-800 underline"
+                                  onClick={() => toggleSharingExpand(sharing.id)}
+                                >
+                                  Show all (+{moreCount})
+                                </button>
+                              )}
+                            </span>
+                          );
                         })()}
                       </div>
                       <p className="font-bold text-lg">{formatVND(totalAmount)}</p>
