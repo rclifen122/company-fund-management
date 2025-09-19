@@ -347,7 +347,12 @@ const BillSharingPage = () => {
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
                     <input type="checkbox" id={`emp-${emp.id}`} checked={selectedEmployees.has(emp.id)} onChange={() => handleEmployeeToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
                     <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
-                      <p className="font-medium text-gray-800">{emp.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-800">{emp.name}</p>
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                          {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                        </span>
+                      </div>
                     </label>
                   </div>
                 ))}
@@ -360,7 +365,12 @@ const BillSharingPage = () => {
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${birthdayPeople.has(emp.id) ? 'bg-pink-50 border-pink-300' : 'bg-gray-50'}`}>
                     <input type="checkbox" id={`bday-${emp.id}`} checked={birthdayPeople.has(emp.id)} onChange={() => handleBirthdayToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500" />
                     <label htmlFor={`bday-${emp.id}`} className="ml-3">
-                      <p className="font-medium text-gray-800">{emp.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-800">{emp.name}</p>
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                          {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                        </span>
+                      </div>
                     </label>
                   </div>
                 ))}
@@ -400,40 +410,82 @@ const BillSharingPage = () => {
         <div className="bg-white p-6 rounded-lg shadow mt-8">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Sharing History</h2>
           <div className="space-y-4">
-            {sharingHistory.map(sharing => (
-              <div key={sharing.id} className="border rounded-lg p-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-bold text-lg">{formatVND(sharing.total_amount)}</p>
-                    <p className="text-sm text-gray-500">{new Date(sharing.sharing_date).toLocaleDateString('vi-VN')}</p>
+            {sharingHistory.map(sharing => {
+              const participants = sharing.bill_sharing_participants || [];
+              const totalAmount = Number(sharing?.total_amount || 0);
+              const directTotalOwed = participants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+              const directCollected = participants
+                .filter(p => p?.payment_status === 'paid')
+                .reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+              const fundCovered = Math.max(0, totalAmount - directTotalOwed);
+              const directOutstanding = Math.max(0, directTotalOwed - directCollected);
+              const directProgress = directTotalOwed > 0 ? (directCollected / directTotalOwed) * 100 : 100;
+
+              return (
+                <div key={sharing.id} className="border rounded-lg p-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="font-bold text-lg">{formatVND(totalAmount)}</p>
+                      <p className="text-sm text-gray-500">{new Date(sharing.sharing_date).toLocaleDateString('vi-VN')}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          Fund Paid: {formatVND(fundCovered)}
+                        </span>
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          Direct Collected: {formatVND(directCollected)}
+                        </span>
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
+                          Direct Outstanding: {formatVND(directOutstanding)}
+                        </span>
+                      </div>
+                      {directTotalOwed > 0 && (
+                        <div className="mt-2">
+                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Direct Collection</span>
+                            <span>{Math.round(Math.min(100, Math.max(0, directProgress)))}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-green-600 h-2 rounded-full"
+                              style={{ width: `${Math.min(100, Math.max(0, directProgress))}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status || 'pending'}</span>
+                      <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        <BadgeCheck className="h-4 w-4 mr-2" />
+                        {sharing.status === 'finalized' ? 'Finalized' : 'Finalize & Update'}
+                      </button>
+                      <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                        Delete
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status || 'pending'}</span>
-                    <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                      <BadgeCheck className="h-4 w-4 mr-2" />
-                      {sharing.status === 'finalized' ? 'Finalized' : 'Finalize & Update'}
-                    </button>
-                    <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                      Delete
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <h4 className="font-semibold mb-2">Participants</h4>
-                  <div className="space-y-2">
+                  <div className="mt-4">
+                    <h4 className="font-semibold mb-2">Participants</h4>
+                    <div className="space-y-2">
                     {sharing.bill_sharing_participants.map(p => (
                       <div key={p.id} className="flex justify-between items-center">
                         <div>
-                          <p>{p.employees.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p>{p.employees.name}</p>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                              {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
+                            </span>
+                          </div>
                           <p className="text-sm text-gray-600">Owed: {formatVND(p.amount_owed)}</p>
                         </div>
                         <button onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.id)} className={`px-3 py-1 text-sm rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}</button>
                       </div>
                     ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
