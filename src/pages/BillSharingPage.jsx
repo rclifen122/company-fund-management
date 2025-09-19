@@ -21,6 +21,8 @@ const BillSharingPage = () => {
   const [detailsSharing, setDetailsSharing] = useState(null);
   const [copyingId, setCopyingId] = useState(null);
   const [toast, setToast] = useState({ show: false, text: '', type: 'success' });
+  const [participantTypeFilter, setParticipantTypeFilter] = useState('all'); // all | fund | direct
+  const [birthdayTypeFilter, setBirthdayTypeFilter] = useState('all'); // all | fund | direct
   const showToast = (text, type = 'success', duration = 2000) => {
     setToast({ show: true, text, type });
     setTimeout(() => setToast({ show: false, text: '', type }), duration);
@@ -100,6 +102,26 @@ const BillSharingPage = () => {
     if (newSelection.has(employeeId)) newSelection.delete(employeeId);
     else newSelection.add(employeeId);
     setBirthdayPeople(newSelection);
+  };
+
+  const bulkSelectParticipants = (action) => {
+    const filtered = employees.filter(emp =>
+      participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund
+    );
+    const next = new Set(selectedEmployees);
+    if (action === 'select') filtered.forEach(emp => next.add(emp.id));
+    if (action === 'clear') filtered.forEach(emp => next.delete(emp.id));
+    setSelectedEmployees(next);
+  };
+
+  const bulkMarkBirthday = (action) => {
+    const filtered = employees.filter(emp =>
+      selectedEmployees.has(emp.id) && (birthdayTypeFilter === 'all' ? true : birthdayTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
+    );
+    const next = new Set(birthdayPeople);
+    if (action === 'mark') filtered.forEach(emp => next.add(emp.id));
+    if (action === 'unmark') filtered.forEach(emp => next.delete(emp.id));
+    setBirthdayPeople(next);
   };
 
   const handleCreateSharing = async () => {
@@ -397,8 +419,40 @@ const BillSharingPage = () => {
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
               <h2 className="text-lg font-semibold text-gray-800 mb-2">2. Select Participants</h2>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-600">Show:</span>
+                  <select
+                    value={participantTypeFilter}
+                    onChange={(e) => setParticipantTypeFilter(e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="fund">Fund</option>
+                    <option value="direct">Direct</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => bulkSelectParticipants('select')}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                    title="Select all shown"
+                  >
+                    Select shown
+                  </button>
+                  <button
+                    onClick={() => bulkSelectParticipants('clear')}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                    title="Clear all shown"
+                  >
+                    Clear shown
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
-                {employees.map(emp => (
+                {employees
+                  .filter(emp => participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
+                  .map(emp => (
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
                     <input type="checkbox" id={`emp-${emp.id}`} checked={selectedEmployees.has(emp.id)} onChange={() => handleEmployeeToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
                     <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
@@ -414,9 +468,42 @@ const BillSharingPage = () => {
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">3. Select Birthday People</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">3. Select Birthday People</h2>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-600">Show:</span>
+                  <select
+                    value={birthdayTypeFilter}
+                    onChange={(e) => setBirthdayTypeFilter(e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="all">All</option>
+                    <option value="fund">Fund</option>
+                    <option value="direct">Direct</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => bulkMarkBirthday('mark')}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                    title="Mark all shown as birthday"
+                  >
+                    Mark shown
+                  </button>
+                  <button
+                    onClick={() => bulkMarkBirthday('unmark')}
+                    className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                    title="Unmark all shown"
+                  >
+                    Unmark shown
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
-                {employees.filter(e => selectedEmployees.has(e.id)).map(emp => (
+                {employees
+                  .filter(e => selectedEmployees.has(e.id))
+                  .filter(emp => birthdayTypeFilter === 'all' ? true : birthdayTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
+                  .map(emp => (
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${birthdayPeople.has(emp.id) ? 'bg-pink-50 border-pink-300' : 'bg-gray-50'}`}>
                     <input type="checkbox" id={`bday-${emp.id}`} checked={birthdayPeople.has(emp.id)} onChange={() => handleBirthdayToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500" />
                     <label htmlFor={`bday-${emp.id}`} className="ml-3">
