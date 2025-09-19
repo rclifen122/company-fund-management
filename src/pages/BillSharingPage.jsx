@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../supabase';
-import { Users, DollarSign, Cake, Check, X, BadgeCheck } from 'lucide-react';
+import { Users, DollarSign, Cake, Check, X, BadgeCheck, Eye, Clipboard } from 'lucide-react';
 
 const BillSharingPage = () => {
   const [expenses, setExpenses] = useState([]);
@@ -18,6 +18,8 @@ const BillSharingPage = () => {
   const [directPayment, setDirectPayment] = useState(0);
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
   const [expandedSharings, setExpandedSharings] = useState(new Set());
+  const [detailsSharing, setDetailsSharing] = useState(null);
+  const [copyingId, setCopyingId] = useState(null);
 
   const fetchSharingHistory = async () => {
     const { data, error } = await supabase
@@ -240,6 +242,41 @@ const BillSharingPage = () => {
       else next.add(sharingId);
       return next;
     });
+  };
+
+  const copySharingExpenses = async (sharing) => {
+    try {
+      setCopyingId(sharing.id);
+      const items = (sharing.bill_sharing_expenses || [])
+        .map(e => {
+          const ex = e?.expenses;
+          if (!ex) return null;
+          const dateStr = ex?.expense_date ? new Date(ex.expense_date).toLocaleDateString('vi-VN') : '';
+          const parts = [ex.description || ''];
+          if (ex?.category) parts.push(ex.category);
+          if (dateStr) parts.push(dateStr);
+          const left = parts.filter(Boolean).join(' — ');
+          const right = typeof ex.amount === 'number' ? formatVND(Number(ex.amount)) : formatVND(0);
+          return `- ${left}: ${right}`;
+        })
+        .filter(Boolean);
+
+      const header = `Bill Sharing on ${new Date(sharing.sharing_date).toLocaleDateString('vi-VN')} | Total: ${formatVND(Number(sharing.total_amount || 0))}`;
+      const text = [header, ...items].join('\n');
+
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        alert('Copied expense list to clipboard.');
+      } else {
+        // Fallback: open a prompt for manual copy
+        window.prompt('Copy the text below:', text);
+      }
+    } catch (err) {
+      console.error('Copy failed:', err);
+      alert('Copy failed. Please try again.');
+    } finally {
+      setCopyingId(null);
+    }
   };
 
   const handleFinalizeSharing = async (sharingId) => {
@@ -514,7 +551,23 @@ const BillSharingPage = () => {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 md:gap-4">
+                      <button
+                        onClick={() => setDetailsSharing(sharing)}
+                        className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View details
+                      </button>
+                      <button
+                        onClick={() => copySharingExpenses(sharing)}
+                        className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        disabled={copyingId === sharing.id}
+                        title="Copy expenses to clipboard"
+                      >
+                        <Clipboard className="h-4 w-4 mr-2" />
+                        {copyingId === sharing.id ? 'Copying…' : 'Copy expenses'}
+                      </button>
                       <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status || 'pending'}</span>
                       <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         <BadgeCheck className="h-4 w-4 mr-2" />
@@ -550,6 +603,110 @@ const BillSharingPage = () => {
           </div>
         </div>
       </div>
+      {detailsSharing && (() => {
+        const participants = detailsSharing.bill_sharing_participants || [];
+        const totalAmount = Number(detailsSharing?.total_amount || 0);
+        const directTotalOwed = participants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+        const directCollected = participants.filter(p => p?.payment_status === 'paid').reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+        const fundCovered = Math.max(0, totalAmount - directTotalOwed);
+        const directOutstanding = Math.max(0, directTotalOwed - directCollected);
+
+        const expenseRows = (detailsSharing.bill_sharing_expenses || []).map((e, idx) => {
+          const ex = e?.expenses || {};
+          const dateStr = ex?.expense_date ? new Date(ex.expense_date).toLocaleDateString('vi-VN') : '';
+          return (
+            <tr key={idx} className="border-b last:border-0">
+              <td className="px-4 py-2 text-sm text-gray-800">{ex.description || '-'}</td>
+              <td className="px-4 py-2 text-sm text-gray-600">{ex.category || '-'}</td>
+              <td className="px-4 py-2 text-sm text-gray-600">{dateStr || '-'}</td>
+              <td className="px-4 py-2 text-sm font-medium text-gray-900">{formatVND(Number(ex.amount || 0))}</td>
+            </tr>
+          );
+        });
+
+        return (
+          <div className="fixed inset-0 z-50">
+            <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setDetailsSharing(null)} />
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Sharing Details</h3>
+                    <p className="text-sm text-gray-600">Date: {new Date(detailsSharing.sharing_date).toLocaleDateString('vi-VN')} • Total: {formatVND(totalAmount)}</p>
+                  </div>
+                  <button onClick={() => setDetailsSharing(null)} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
+                </div>
+
+                <div className="p-6 space-y-6 overflow-y-auto">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Linked Expenses</h4>
+                    <div className="overflow-x-auto border rounded">
+                      <table className="min-w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Category</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {expenseRows}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-gray-50 rounded p-4">
+                      <p className="text-sm text-gray-600">Fund Paid</p>
+                      <p className="text-lg font-bold text-gray-900">{formatVND(fundCovered)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-4">
+                      <p className="text-sm text-gray-600">Direct Owed</p>
+                      <p className="text-lg font-bold text-gray-900">{formatVND(directTotalOwed)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-4">
+                      <p className="text-sm text-gray-600">Direct Collected</p>
+                      <p className="text-lg font-bold text-green-700">{formatVND(directCollected)}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded p-4">
+                      <p className="text-sm text-gray-600">Direct Outstanding</p>
+                      <p className="text-lg font-bold text-orange-700">{formatVND(directOutstanding)}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Participants</h4>
+                    <div className="space-y-2">
+                      {participants.map(p => (
+                        <div key={p.id} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-800">{p.employees?.name || 'Unknown'}</span>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                              {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
+                            </span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium mr-3">{formatVND(Number(p.amount_owed || 0))}</span>
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+                              {p.payment_status === 'paid' ? 'Paid' : 'Pending'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
+                  <button onClick={() => setDetailsSharing(null)} className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </Layout>
   );
 };
