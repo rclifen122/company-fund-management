@@ -1,4 +1,4 @@
-const StatCard = ({ title, value, change, changeType, icon: Icon }) => {
+const StatCard = ({ title, value, change, changeType, icon: Icon, subValue }) => {
   const isPositive = changeType === 'positive';
   const isNegative = changeType === 'negative';
 
@@ -13,6 +13,9 @@ const StatCard = ({ title, value, change, changeType, icon: Icon }) => {
             <dl>
               <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
               <dd className="text-lg font-medium text-gray-900">{value}</dd>
+              {subValue && (
+                <dd className="text-xs text-gray-500 mt-1">{subValue}</dd>
+              )}
             </dl>
           </div>
         </div>

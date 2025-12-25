@@ -6,3 +6,9 @@ dist
 *.log
 full_employees_list.csv
 simple_clear_prompt.md
+CONTEXT_MEMORY.md
+
+
+# Data & DB
+db/migrations/*.sql
+db/sql/*.md

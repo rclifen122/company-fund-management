@@ -7,6 +7,7 @@ import { Plus, Calendar, TrendingUp, Users, PiggyBank, Search, Filter, Eye, Down
 const FundCollectionPage = () => {
   const [payments, setPayments] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [rawData, setRawData] = useState({ employees: [], payments: [] });
   const [loading, setLoading] = useState(true);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('current');
@@ -98,8 +99,7 @@ const FundCollectionPage = () => {
           ];
 
           setTimeout(() => {
-            setEmployees(mockEmployees);
-            setPayments(mockPayments);
+            setRawData({ employees: mockEmployees, payments: mockPayments });
             setLoading(false);
           }, 1000);
           return;
@@ -139,84 +139,7 @@ const FundCollectionPage = () => {
         const employeesData = employeesResponse.data || [];
         const paymentsData = paymentsResponse.data || [];
 
-        // Process employees data to add payment status
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-
-        const processedEmployees = employeesData?.map(employee => {
-          // If employee has left (has leave_date), set status accordingly
-          if (employee.leave_date) {
-            return {
-              ...employee,
-              monthly_contribution: Number(employee.monthly_contribution_amount),
-              total_paid: Number(employee.total_paid),
-              current_month_status: 'completed', // Special status for employees who left
-              last_payment_date: employee.leave_date
-            };
-          }
-
-          // For active employees, calculate payment status
-          // Get all payments for this employee
-          const employeePayments = paymentsData?.filter(p => p.employee_id === employee.id) || [];
-          
-          // Find latest payment
-          const latestPayment = employeePayments
-            .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
-
-          // Check if current month is covered by any payment
-          const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-          const isCurrentMonthCovered = employeePayments.some(payment => {
-            return payment.months_covered && payment.months_covered.includes(currentMonthKey);
-          });
-
-          // Determine current month status
-          let status = 'pending';
-          if (isCurrentMonthCovered) {
-            status = 'paid';
-          } else if (latestPayment) {
-            const now = new Date();
-            const lastPaymentDate = new Date(latestPayment.payment_date);
-            const daysSinceLastPayment = Math.floor(
-              (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
-            );
-            
-            console.log(`Employee ${employee.name}:`, {
-              lastPaymentDate: latestPayment.payment_date,
-              daysSinceLastPayment,
-              currentDate: now.toISOString().split('T')[0],
-              currentMonthKey,
-              isCurrentMonthCovered,
-              monthsCovered: employeePayments.map(p => p.months_covered).flat()
-            });
-            
-            // If payment date is in the future, consider it current
-            if (lastPaymentDate > now) {
-              status = 'paid';
-            } else if (daysSinceLastPayment > 45) {
-              status = 'overdue';
-            }
-          }
-
-          return {
-            ...employee,
-            monthly_contribution: Number(employee.monthly_contribution_amount),
-            total_paid: Number(employee.total_paid),
-            current_month_status: status,
-            last_payment_date: latestPayment?.payment_date || null
-          };
-        }) || [];
-
-        // Process payments data to add employee info
-        const processedPayments = paymentsData?.map(payment => ({
-          ...payment,
-          employee_name: payment.employees?.name || 'Unknown',
-          employee_department: payment.employees?.department || 'Unknown',
-          amount: Number(payment.amount),
-          recorded_by: 'Admin' // Will be dynamic in future
-        })) || [];
-
-        setEmployees(processedPayments ? processedEmployees : []);
-        setPayments(processedPayments);
+        setRawData({ employees: employeesData, payments: paymentsData });
         setLoading(false);
 
       } catch (error) {
@@ -233,8 +156,7 @@ const FundCollectionPage = () => {
             last_payment_date: '2024-01-05'
           }
         ];
-        setEmployees(mockEmployees);
-        setPayments([]);
+        setRawData({ employees: mockEmployees, payments: [] });
         setLoading(false);
       }
     };
@@ -242,6 +164,99 @@ const FundCollectionPage = () => {
   useEffect(() => {
     fetchFundCollectionData();
   }, []);
+
+  // Process data when rawData or filters change
+  useEffect(() => {
+    const { employees: employeesData, payments: paymentsData } = rawData;
+    
+    // Process payments data to add employee info
+    const processedPayments = paymentsData?.map(payment => ({
+      ...payment,
+      employee_name: payment.employees?.name || 'Unknown',
+      employee_department: payment.employees?.department || 'Unknown',
+      amount: Number(payment.amount),
+      recorded_by: 'Admin' // Will be dynamic in future
+    })) || [];
+    
+    setPayments(processedPayments);
+
+    // Determine target month/year for status calculation
+    let targetMonth = new Date().getMonth(); // Default to current month (0-11)
+    let targetYear = new Date().getFullYear();
+    
+    if (monthFilter !== 'all') {
+      const selectedMonth = parseInt(monthFilter.replace('T', ''));
+      targetMonth = selectedMonth - 1; // Convert 1-12 to 0-11
+    }
+
+    const processedEmployees = employeesData?.map(employee => {
+      // If employee has left (has leave_date), set status accordingly
+      if (employee.leave_date) {
+        return {
+          ...employee,
+          monthly_contribution: Number(employee.monthly_contribution_amount),
+          total_paid: Number(employee.total_paid),
+          current_month_status: 'completed',
+          last_payment_date: employee.leave_date
+        };
+      }
+
+      // For active employees, calculate payment status
+      // Get all payments for this employee
+      const employeePayments = processedPayments.filter(p => p.employee_id === employee.id) || [];
+      
+      // Find latest payment
+      const latestPayment = employeePayments
+        .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
+
+      // Check if target month is covered by any payment
+      const targetMonthKey = `-${String(targetMonth + 1).padStart(2, '0')}`; // e.g. "-10"
+      const isTargetMonthCovered = employeePayments.some(payment => {
+        return payment.months_covered && payment.months_covered.some(m => m.endsWith(targetMonthKey));
+      });
+
+      // Determine status based on target month coverage
+      let status = 'pending';
+      if (isTargetMonthCovered) {
+        status = 'paid';
+      } else if (latestPayment && monthFilter === 'all') {
+        // Fallback logic only for "all" filter (legacy logic)
+        const now = new Date();
+        const lastPaymentDate = new Date(latestPayment.payment_date);
+        const daysSinceLastPayment = Math.floor(
+          (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
+        );
+        
+        if (lastPaymentDate > now) {
+          status = 'paid';
+        } else if (daysSinceLastPayment > 45) {
+          status = 'overdue';
+        }
+      } else if (monthFilter !== 'all') {
+         // If a specific month is selected and not paid, it's pending (or overdue if in past)
+         // For simplicity, just mark as pending if not paid for that month
+         status = 'pending';
+         
+         // Optional: Check if target month is in the past to mark overdue
+         const today = new Date();
+         const targetDate = new Date(targetYear, targetMonth + 1, 0); // End of target month
+         if (targetDate < today && !isTargetMonthCovered) {
+             status = 'overdue';
+         }
+      }
+
+      return {
+        ...employee,
+        monthly_contribution: Number(employee.monthly_contribution_amount),
+        total_paid: Number(employee.total_paid),
+        current_month_status: status,
+        last_payment_date: latestPayment?.payment_date || null
+      };
+    }) || [];
+
+    setEmployees(processedEmployees);
+
+  }, [rawData, monthFilter]);
 
   // Realtime updates: refresh data on employees/payments changes
   useEffect(() => {
@@ -427,14 +442,22 @@ const FundCollectionPage = () => {
 
     // Month filter (T1-T12) - with null safety
     let matchesMonth = true;
-    if (payment.payment_date && monthFilter !== 'all') {
+    if (monthFilter !== 'all') {
       try {
-        const paymentDate = new Date(payment.payment_date);
-        const paymentMonth = paymentDate.getMonth() + 1; // JavaScript months are 0-based
-        const selectedMonth = parseInt(monthFilter.replace('T', '')); // Convert T1 to 1, T2 to 2, etc.
-        matchesMonth = paymentMonth === selectedMonth;
+        const selectedMonth = parseInt(monthFilter.replace('T', ''));
+        const monthString = String(selectedMonth).padStart(2, '0');
+        // Check if months_covered contains the selected month
+        if (payment.months_covered && Array.isArray(payment.months_covered)) {
+          matchesMonth = payment.months_covered.some(m => m.endsWith(`-${monthString}`));
+        } else if (payment.payment_date) {
+           // Fallback to payment date if months_covered is missing
+           const paymentDate = new Date(payment.payment_date);
+           matchesMonth = (paymentDate.getMonth() + 1) === selectedMonth;
+        } else {
+           matchesMonth = false;
+        }
       } catch (error) {
-        console.warn('Invalid payment date for month filter:', payment.payment_date);
+        console.warn('Invalid data for month filter:', error);
         matchesMonth = false;
       }
     }

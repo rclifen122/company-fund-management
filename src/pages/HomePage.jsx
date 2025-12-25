@@ -33,7 +33,8 @@ const HomePage = () => {
     completedCount: 0,
     collectionRate: 0,
     expenseRate: 0,
-    monthlyGrowth: 0
+    monthlyGrowth: 0,
+    projectedBalance: 0
   });
   const [monthlyData, setMonthlyData] = useState([]);
   const [expensesByCategory, setExpensesByCategory] = useState([]);
@@ -64,7 +65,8 @@ const HomePage = () => {
             expectedMonthly: 1200000,
             collectionRate: 66.7,
             expenseRate: 42.5,
-            monthlyGrowth: 15.2
+            monthlyGrowth: 15.2,
+            projectedBalance: 550000
           });
 
           setMonthlyData([
@@ -158,10 +160,11 @@ const HomePage = () => {
         });
 
         // Calculate fund summary manually to avoid database view dependency
-        const [summaryResponse, allEmployeesResponse, allPaymentsForSummaryResponse] = await Promise.all([
+        const [summaryResponse, allEmployeesResponse, allPaymentsForSummaryResponse, pendingBillsResponse] = await Promise.all([
           supabase.from('fund_summary').select('*').single(),
           supabase.from('employees').select('id, total_paid, leave_date, participates_in_fund'),
-          supabase.from('fund_payments').select('amount, employee_id') // Get all payments for calculation
+          supabase.from('fund_payments').select('amount, employee_id'), // Get all payments for calculation
+          supabase.from('bill_sharing').select('total_amount, bill_sharing_participants(amount_owed, payment_method)').eq('status', 'pending')
         ]);
 
         console.log('Summary response:', summaryResponse);
@@ -180,6 +183,22 @@ const HomePage = () => {
         }, 0);
 
         const correctedTotalCollected = totalCollectedFromAllEmployees;
+
+        // Calculate pending fund deduction from bill sharing
+        const pendingBills = pendingBillsResponse.data || [];
+        let pendingFundDeduction = 0;
+        pendingBills.forEach(bill => {
+             const totalAmount = bill.total_amount || 0;
+             const participants = bill.bill_sharing_participants || [];
+             // Sum of direct payments
+             const directTotal = participants
+                 .filter(p => p.payment_method === 'direct')
+                 .reduce((sum, p) => sum + (p.amount_owed || 0), 0);
+             
+             // Fund covers the rest
+             const fundPortion = Math.max(0, totalAmount - directTotal);
+             pendingFundDeduction += fundPortion;
+        });
 
         // Get ALL employees (including those who left) for proper status calculation
         const employeesResponse = await supabase
@@ -292,7 +311,8 @@ const HomePage = () => {
               (paidEmployees / activeEmployees.length) * 100 : 0,
             expenseRate: correctedTotalCollected > 0 ? 
               (totalSpentNet / correctedTotalCollected) * 100 : 0,
-            monthlyGrowth: 15.2
+            monthlyGrowth: 15.2,
+            projectedBalance: correctedCurrentBalance - pendingFundDeduction
           };
           console.log('Setting new stats:', newStats);
           setStats(newStats);
@@ -665,6 +685,7 @@ const HomePage = () => {
           <StatCard
             title="Số Dư Hiện Tại"
             value={formatVND(stats.currentBalance)}
+            subValue={stats.currentBalance !== stats.projectedBalance ? `Dự kiến: ${formatVND(stats.projectedBalance)}` : null}
             change={stats.currentBalance >= 0 ? "Dương tính" : "Âm tính"}
             changeType={stats.currentBalance >= 0 ? "positive" : "negative"}
             icon={Target}
