@@ -164,7 +164,13 @@ const HomePage = () => {
           supabase.from('fund_summary').select('*').single(),
           supabase.from('employees').select('id, total_paid, leave_date, participates_in_fund'),
           supabase.from('fund_payments').select('amount, employee_id'), // Get all payments for calculation
-          supabase.from('bill_sharing').select('total_amount, bill_sharing_participants(amount_owed, payment_method)').eq('status', 'pending')
+          supabase.from('bill_sharing')
+            .select(`
+              total_amount, 
+              bill_sharing_participants(amount_owed, payment_method),
+              bill_sharing_expenses(expense_id)
+            `)
+            .eq('status', 'pending')
         ]);
 
         console.log('Summary response:', summaryResponse);
@@ -186,6 +192,13 @@ const HomePage = () => {
 
         // Calculate pending fund deduction from bill sharing
         const pendingBills = pendingBillsResponse.data || [];
+        
+        // Identify expenses that are currently in a pending bill sharing
+        const pendingExpenseIds = pendingBills.flatMap(bill => 
+          bill.bill_sharing_expenses?.map(be => be.expense_id) || []
+        );
+        console.log('Expenses in pending bills:', pendingExpenseIds);
+
         let pendingFundDeduction = 0;
         pendingBills.forEach(bill => {
              const totalAmount = bill.total_amount || 0;
@@ -215,7 +228,15 @@ const HomePage = () => {
 
         console.log('Expenses response:', expensesResponse);
         const expensesData = expensesResponse.data || [];
-        const totalSpentNet = (expensesData || []).reduce((sum, e) => sum + Number((e.net_amount ?? e.amount) || 0), 0);
+        
+        // Calculate total spent net, EXCLUDING expenses that are in pending bill sharing
+        // This ensures the current balance reflects the "pre-sharing" state for these items
+        // allowing the Projected Balance to subtract the correct Fund Portion later.
+        const totalSpentNet = (expensesData || []).reduce((sum, e) => {
+          if (pendingExpenseIds.includes(e.id)) return sum;
+          return sum + Number((e.net_amount ?? e.amount) || 0);
+        }, 0);
+        
         const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
 
         console.log('HomePage fund calculation:', {

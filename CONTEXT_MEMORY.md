@@ -101,5 +101,18 @@ Snapshot of repository structure, tech stack, runtime behavior, and data model t
 - FKs ensure valid relationships and cascade delete of linked rows.
 - Finalized sharings are not deletable in the UI to preserve accounting history.
 
+*This is a living document. Last updated: 2025-12-26 â€” Updated fund collection filters (month paid for), month-aware employee status tracking, and projected balance display on Dashboard.*
+
+## Latest Updates (2025-12-26)
+### Fund Collection Enhancements
+- **Smart Month Filter**: The "Lịch Sử Thanh Toán" (Payment History) filter by month now accurately checks the `months_covered` field in the database. This allows filtering payments based on the actual month they are intended for, rather than just when the transaction was recorded.
+- **Month-Aware Employee Status**: The "Employee Payment Status" section is now fully reactive to the selected Month Filter. When a specific month (e.g., T10) is selected, the status (Paid, Pending, Overdue) is calculated specifically for that month based on `months_covered` data.
+
+### Dashboard & UI Improvements
+- **Projected Balance ("Sá»‘ dÆ° hiá»‡n táº¡i" sub-value)**: The Dashboard now calculates a "Projected Balance" by accounting for pending bill shares.
+  - If a bill sharing record is created but not yet finalized, the fund's portion is calculated and subtracted from the current balance.
+  - The Current Balance StatCard displays this as "Dá»± kiáº¿n: [Amount]" below the main number, allowing immediate visibility into the impact of unfinalized bills.
+- **StatCard Component**: Enhanced the reusable `StatCard` component to support an optional `subValue` prop for displaying secondary metrics or projected figures.
+
 ---
-*This is a living document. Last updated: 2025-09-19 — Bill Sharing UI enhancements, toast feedback, filters/bulk actions, and non-fund ops script path.*
+## Purpose
