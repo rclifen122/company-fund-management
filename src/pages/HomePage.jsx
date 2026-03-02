@@ -48,14 +48,14 @@ const HomePage = () => {
       try {
         setLoading(true);
         // Check if we're in development mode
-        const isDevelopmentMode = 
-          !import.meta.env.VITE_SUPABASE_URL || 
+        const isDevelopmentMode =
+          !import.meta.env.VITE_SUPABASE_URL ||
           import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
           import.meta.env.VITE_DEV_MODE === 'true';
 
         if (isDevelopmentMode) {
           // Use mock data in development mode
-    setStats({
+          setStats({
             totalCollected: 1000000,
             totalExpenses: 425000,
             currentBalance: 575000,
@@ -151,7 +151,7 @@ const HomePage = () => {
         console.log('Recent payments response:', recentPaymentsResponse);
         const allPaymentsData = allPaymentsForChartResponse.data || [];
         const recentPaymentsData = recentPaymentsResponse.data || [];
-        
+
         console.log('=== RAW DATA SUMMARY ===');
         console.log('Total payments in database:', allPaymentsData.length, allPaymentsData);
         console.log('Date range of payments:', {
@@ -182,9 +182,9 @@ const HomePage = () => {
         console.log('Raw payments for summary data:', allPaymentsForSummaryData);
 
         // Calculate correct total fund collection using consistent approach
-        // Since employee.total_paid is updated by triggers when payments are made,
-        // we should use total_paid for ALL employees (both active and who left)
-        const totalCollectedFromAllEmployees = allEmployeesData.filter(e => e.participates_in_fund).reduce((sum, employee) => {
+        // Since employee.total_paid is updated by triggers and has been synced with real payments, 
+        // we use total_paid for ALL employees (both active and who left) as the absolute source of truth
+        const totalCollectedFromAllEmployees = allEmployeesData.reduce((sum, employee) => {
           return sum + (employee.total_paid || 0);
         }, 0);
 
@@ -192,25 +192,25 @@ const HomePage = () => {
 
         // Calculate pending fund deduction from bill sharing
         const pendingBills = pendingBillsResponse.data || [];
-        
+
         // Identify expenses that are currently in a pending bill sharing
-        const pendingExpenseIds = pendingBills.flatMap(bill => 
+        const pendingExpenseIds = pendingBills.flatMap(bill =>
           bill.bill_sharing_expenses?.map(be => be.expense_id) || []
         );
         console.log('Expenses in pending bills:', pendingExpenseIds);
 
         let pendingFundDeduction = 0;
         pendingBills.forEach(bill => {
-             const totalAmount = bill.total_amount || 0;
-             const participants = bill.bill_sharing_participants || [];
-             // Sum of direct payments
-             const directTotal = participants
-                 .filter(p => p.payment_method === 'direct')
-                 .reduce((sum, p) => sum + (p.amount_owed || 0), 0);
-             
-             // Fund covers the rest
-             const fundPortion = Math.max(0, totalAmount - directTotal);
-             pendingFundDeduction += fundPortion;
+          const totalAmount = bill.total_amount || 0;
+          const participants = bill.bill_sharing_participants || [];
+          // Sum of direct payments
+          const directTotal = participants
+            .filter(p => p.payment_method === 'direct')
+            .reduce((sum, p) => sum + (p.amount_owed || 0), 0);
+
+          // Fund covers the rest
+          const fundPortion = Math.max(0, totalAmount - directTotal);
+          pendingFundDeduction += fundPortion;
         });
 
         // Get ALL employees (including those who left) for proper status calculation
@@ -227,28 +227,22 @@ const HomePage = () => {
           .select('*');
 
         console.log('Expenses response:', expensesResponse);
-        const expensesData = expensesResponse.data || [];
-        
-        // Calculate total spent net, EXCLUDING expenses that are in pending bill sharing
-        // This ensures the current balance reflects the "pre-sharing" state for these items
-        // allowing the Projected Balance to subtract the correct Fund Portion later.
+        // Identify expenses that are NOT in a pending bill sharing.
+        // If an expense is in a pending bill, it shouldn't deduct from "Số Dư Hiện Tại" yet.
         const totalSpentNet = (expensesData || []).reduce((sum, e) => {
           if (pendingExpenseIds.includes(e.id)) return sum;
           return sum + Number((e.net_amount ?? e.amount) || 0);
         }, 0);
-        
+
         const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
 
         console.log('HomePage fund calculation:', {
           totalEmployees: allEmployeesData.length,
-          employeesWithPayments: allEmployeesData.filter(e => e.total_paid > 0).length,
           totalCollectedFromAllEmployees,
-          totalSpent: summaryData?.total_spent || 0,
           totalSpentNet,
-          correctedCurrentBalance,
-          originalFromView: summaryData?.total_collected
+          correctedCurrentBalance
         });
-        
+
         console.log('Total expenses in database:', expensesData.length);
         if (expensesData.length > 0) {
           console.log('Expense date range:', {
@@ -273,7 +267,7 @@ const HomePage = () => {
 
           // For active employees, calculate payment status
           const employeePayments = allPaymentsData?.filter(p => p.employee_id === employee.id) || [];
-          
+
           // Find latest payment
           const latestPayment = employeePayments
             .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
@@ -294,7 +288,7 @@ const HomePage = () => {
             const daysSinceLastPayment = Math.floor(
               (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
             );
-            
+
             if (lastPaymentDate > now) {
               status = 'paid';
             } else if (daysSinceLastPayment > 45) {
@@ -328,9 +322,9 @@ const HomePage = () => {
             pendingCount: pendingEmployees,
             completedCount: completedEmployees,
             expectedMonthly: activeEmployees.length * 100000,
-            collectionRate: activeEmployees.length > 0 ? 
+            collectionRate: activeEmployees.length > 0 ?
               (paidEmployees / activeEmployees.length) * 100 : 0,
-            expenseRate: correctedTotalCollected > 0 ? 
+            expenseRate: correctedTotalCollected > 0 ?
               (totalSpentNet / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2,
             projectedBalance: correctedCurrentBalance - pendingFundDeduction
@@ -345,23 +339,23 @@ const HomePage = () => {
         // Process monthly chart data using ALL payments
         const monthlyChartData = [];
         const today = new Date();
-        
+
         for (let monthNum = 1; monthNum <= 12; monthNum++) {
           // Show all 12 months in calendar order (T1-T12)
           const targetDate = new Date(today.getFullYear(), monthNum - 1, 1);
           const monthKey = `T${monthNum}`;
           const targetMonth = monthNum - 1; // JavaScript months are 0-based
           const targetYear = targetDate.getFullYear();
-          
+
           console.log(`Processing month ${monthKey} (${targetMonth + 1}/${targetYear})`);
-          
+
           // Calculate monthly fund collection from payment_date ONLY
           const monthPayments = (allPaymentsData || []).filter(p => {
             if (!p.payment_date) return false;
             try {
               const paymentDate = new Date(p.payment_date);
-              const matches = paymentDate.getMonth() === targetMonth && 
-                            paymentDate.getFullYear() === targetYear;
+              const matches = paymentDate.getMonth() === targetMonth &&
+                paymentDate.getFullYear() === targetYear;
               if (matches) {
                 console.log(`Found payment for ${monthKey}:`, p.amount, 'on', p.payment_date);
               }
@@ -371,14 +365,14 @@ const HomePage = () => {
               return false;
             }
           }).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-          
+
           // Calculate monthly expenses from expense_date ONLY (use net_amount when available)
           const monthExpenses = (expensesData || []).filter(e => {
             if (!e.expense_date) return false;
             try {
               const expenseDate = new Date(e.expense_date);
-              const matches = expenseDate.getMonth() === targetMonth && 
-                            expenseDate.getFullYear() === targetYear;
+              const matches = expenseDate.getMonth() === targetMonth &&
+                expenseDate.getFullYear() === targetYear;
               if (matches) {
                 console.log(`Found expense for ${monthKey}:`, (e.net_amount ?? e.amount), 'on', e.expense_date);
               }
@@ -450,15 +444,15 @@ const HomePage = () => {
         console.log('Processed expense category data:', categoryChartData);
         setExpensesByCategory(categoryChartData);
 
-                // Process recent activities - with null safety
+        // Process recent activities - with null safety
         const activities = [];
-        
+
         // Add recent payments
         (recentPaymentsData || []).slice(0, 3).forEach(payment => {
           if (!payment) return;
           try {
-            const timeAgo = payment.created_at ? 
-              new Date(payment.created_at).toLocaleDateString('vi-VN') : 
+            const timeAgo = payment.created_at ?
+              new Date(payment.created_at).toLocaleDateString('vi-VN') :
               'Unknown time';
             activities.push({
               id: payment.id || Date.now(),
@@ -472,13 +466,13 @@ const HomePage = () => {
             console.warn('Error processing payment:', payment, error);
           }
         });
-        
+
         // Add recent expenses  
         (expensesData || []).slice(0, 2).forEach(expense => {
           if (!expense) return;
           try {
-            const timeAgo = expense.created_at ? 
-              new Date(expense.created_at).toLocaleDateString('vi-VN') : 
+            const timeAgo = expense.created_at ?
+              new Date(expense.created_at).toLocaleDateString('vi-VN') :
               'Unknown time';
             activities.push({
               id: expense.id || Date.now(),
@@ -536,12 +530,12 @@ const HomePage = () => {
     }).format(value);
   };
 
-    // Handle payment submission
+  // Handle payment submission
   const handlePaymentSubmit = async (paymentData) => {
     try {
       // Check if we're in development mode
-      const isDevelopmentMode = 
-        !import.meta.env.VITE_SUPABASE_URL || 
+      const isDevelopmentMode =
+        !import.meta.env.VITE_SUPABASE_URL ||
         import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
         import.meta.env.VITE_DEV_MODE === 'true';
 
@@ -566,10 +560,10 @@ const HomePage = () => {
       if (error) throw error;
 
       alert('Payment recorded successfully!');
-      
+
       // Refresh the dashboard data
       window.location.reload();
-      
+
     } catch (error) {
       console.error('Error recording payment:', error);
       alert('Error recording payment: ' + error.message);
@@ -580,8 +574,8 @@ const HomePage = () => {
   const handleExpenseSubmit = async (expenseData) => {
     try {
       // Check if we're in development mode
-      const isDevelopmentMode = 
-        !import.meta.env.VITE_SUPABASE_URL || 
+      const isDevelopmentMode =
+        !import.meta.env.VITE_SUPABASE_URL ||
         import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
         import.meta.env.VITE_DEV_MODE === 'true';
 
@@ -612,10 +606,10 @@ const HomePage = () => {
       if (error) throw error;
 
       alert('Expense recorded successfully!');
-      
+
       // Refresh the dashboard data
       window.location.reload();
-      
+
     } catch (error) {
       console.error('Error recording expense:', error);
       alert('Error recording expense: ' + error.message);
@@ -630,19 +624,19 @@ const HomePage = () => {
           <div className="flex justify-between items-center mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Bảng Điều Khiển</h1>
-          <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500">
                 Tổng quan tình hình tài chính quỹ công ty
               </p>
             </div>
             <div className="flex space-x-3">
-              <button 
+              <button
                 onClick={() => navigate('/fund-collection')}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nhập Quỹ
               </button>
-              <button 
+              <button
                 onClick={() => navigate('/expenses')}
                 className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
               >
@@ -662,7 +656,7 @@ const HomePage = () => {
                     Cảnh báo: Số dư quỹ thấp
                   </h3>
                   <p className="text-sm text-yellow-700 mt-1">
-                    Số dư hiện tại ({formatVND(stats.currentBalance)}) đang thấp hơn mức khuyến nghị 200.000 ₫. 
+                    Số dư hiện tại ({formatVND(stats.currentBalance)}) đang thấp hơn mức khuyến nghị 200.000 ₫.
                     Hãy xem xét điều chỉnh chi tiêu hoặc tăng thu quỹ.
                   </p>
                 </div>
@@ -794,7 +788,7 @@ const HomePage = () => {
               <p className="text-xs text-gray-500">Đã nghỉ việc</p>
             </div>
           </div>
-          
+
           {/* Progress Bar */}
           <div className="mt-4">
             <div className="flex justify-between text-sm text-gray-600 mb-2">
@@ -802,7 +796,7 @@ const HomePage = () => {
               <span>{Math.round(stats.collectionRate)}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className="bg-green-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${stats.collectionRate}%` }}
               ></div>
@@ -899,13 +893,12 @@ const HomePage = () => {
                         ) : (
                           <Receipt className="h-4 w-4 text-red-600 mr-2" />
                         )}
-                      <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-gray-900">
                           {activity.type === 'payment' ? 'Fund Collection' : 'Expense'}
-                      </p>
+                        </p>
                       </div>
-                      <p className={`text-sm font-medium ${
-                        activity.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <p className={`text-sm font-medium ${activity.amount.startsWith('+') ? 'text-green-600' : 'text-red-600'
+                        }`}>
                         {activity.amount}
                       </p>
                     </div>
@@ -923,7 +916,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        
+
       </div>
     </Layout>
   );

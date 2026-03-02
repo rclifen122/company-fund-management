@@ -19,132 +19,17 @@ const FundCollectionPage = () => {
 
   // Fetch real data from Supabase (reusable)
   const fetchFundCollectionData = async () => {
-      try {
-        setLoading(true);
+    try {
+      setLoading(true);
 
-        // Check if we're in development mode
-        const isDevelopmentMode = 
-          !import.meta.env.VITE_SUPABASE_URL || 
-          import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-          import.meta.env.VITE_DEV_MODE === 'true';
+      // Check if we're in development mode
+      const isDevelopmentMode =
+        !import.meta.env.VITE_SUPABASE_URL ||
+        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
+        import.meta.env.VITE_DEV_MODE === 'true';
 
-        if (isDevelopmentMode) {
-          // Use mock data in development mode
-          const mockEmployees = [
-            {
-              id: 1,
-              name: 'Nguyễn Văn A',
-              department: 'IT',
-              monthly_contribution: 100000,
-              total_paid: 300000,
-              current_month_status: 'paid',
-              last_payment_date: '2024-01-05'
-            },
-            {
-              id: 2,
-              name: 'Trần Thị B',
-              department: 'HR',
-              monthly_contribution: 100000,
-              total_paid: 200000,
-              current_month_status: 'pending',
-              last_payment_date: '2023-12-05'
-            },
-            {
-              id: 3,
-              name: 'Lê Văn C',
-              department: 'Finance',
-              monthly_contribution: 100000,
-              total_paid: 400000,
-              current_month_status: 'paid',
-              last_payment_date: '2024-01-03'
-            },
-            {
-              id: 4,
-              name: 'Phạm Thị D',
-              department: 'Marketing',
-              monthly_contribution: 100000,
-              total_paid: 100000,
-              current_month_status: 'overdue',
-              last_payment_date: '2023-11-15'
-            }
-          ];
-
-          const mockPayments = [
-            {
-              id: 1,
-              employee_id: 1,
-              employee_name: 'Nguyễn Văn A',
-              employee_department: 'IT',
-              amount: 300000,
-              payment_date: '2024-01-05',
-              months_covered: ['2024-01', '2024-02', '2024-03'],
-              payment_method: 'cash',
-              notes: 'Thanh toán 3 tháng',
-              recorded_by: 'Admin',
-              created_at: '2024-01-05T10:30:00Z'
-            },
-            {
-              id: 2,
-              employee_id: 3,
-              employee_name: 'Lê Văn C',
-              employee_department: 'Finance',
-              amount: 100000,
-              payment_date: '2024-01-03',
-              months_covered: ['2024-01'],
-              payment_method: 'bank_transfer',
-              notes: 'Thanh toán tháng 1',
-              recorded_by: 'Admin',
-              created_at: '2024-01-03T14:15:00Z'
-            }
-          ];
-
-          setTimeout(() => {
-            setRawData({ employees: mockEmployees, payments: mockPayments });
-            setLoading(false);
-          }, 1000);
-          return;
-        }
-
-        // Fetch real data from Supabase
-        console.log('Fetching fund collection data from Supabase...');
-
-        // Get only employees participating in the fund
-        const employeesResponse = await supabase
-          .from('employees')
-          .select('*')
-          .eq('participates_in_fund', true);
-
-        console.log('Employees response:', employeesResponse);
-        if (employeesResponse.error) {
-          console.error('Employees error:', employeesResponse.error);
-          throw employeesResponse.error;
-        }
-
-        // Get payments with employee info, only for fund members
-        const paymentsResponse = await supabase
-          .from('fund_payments')
-          .select(`
-            *,
-            employees!inner(name, department)
-          `)
-          .eq('employees.participates_in_fund', true)
-          .order('created_at', { ascending: false });
-
-        console.log('Payments response:', paymentsResponse);
-        if (paymentsResponse.error) {
-          console.error('Payments error:', paymentsResponse.error);
-          throw paymentsResponse.error;
-        }
-
-        const employeesData = employeesResponse.data || [];
-        const paymentsData = paymentsResponse.data || [];
-
-        setRawData({ employees: employeesData, payments: paymentsData });
-        setLoading(false);
-
-      } catch (error) {
-        console.error('Error fetching fund collection data:', error);
-        // Fall back to mock data on error
+      if (isDevelopmentMode) {
+        // Use mock data in development mode
         const mockEmployees = [
           {
             id: 1,
@@ -154,12 +39,125 @@ const FundCollectionPage = () => {
             total_paid: 300000,
             current_month_status: 'paid',
             last_payment_date: '2024-01-05'
+          },
+          {
+            id: 2,
+            name: 'Trần Thị B',
+            department: 'HR',
+            monthly_contribution: 100000,
+            total_paid: 200000,
+            current_month_status: 'pending',
+            last_payment_date: '2023-12-05'
+          },
+          {
+            id: 3,
+            name: 'Lê Văn C',
+            department: 'Finance',
+            monthly_contribution: 100000,
+            total_paid: 400000,
+            current_month_status: 'paid',
+            last_payment_date: '2024-01-03'
+          },
+          {
+            id: 4,
+            name: 'Phạm Thị D',
+            department: 'Marketing',
+            monthly_contribution: 100000,
+            total_paid: 100000,
+            current_month_status: 'overdue',
+            last_payment_date: '2023-11-15'
           }
         ];
-        setRawData({ employees: mockEmployees, payments: [] });
-        setLoading(false);
+
+        const mockPayments = [
+          {
+            id: 1,
+            employee_id: 1,
+            employee_name: 'Nguyễn Văn A',
+            employee_department: 'IT',
+            amount: 300000,
+            payment_date: '2024-01-05',
+            months_covered: ['2024-01', '2024-02', '2024-03'],
+            payment_method: 'cash',
+            notes: 'Thanh toán 3 tháng',
+            recorded_by: 'Admin',
+            created_at: '2024-01-05T10:30:00Z'
+          },
+          {
+            id: 2,
+            employee_id: 3,
+            employee_name: 'Lê Văn C',
+            employee_department: 'Finance',
+            amount: 100000,
+            payment_date: '2024-01-03',
+            months_covered: ['2024-01'],
+            payment_method: 'bank_transfer',
+            notes: 'Thanh toán tháng 1',
+            recorded_by: 'Admin',
+            created_at: '2024-01-03T14:15:00Z'
+          }
+        ];
+
+        setTimeout(() => {
+          setRawData({ employees: mockEmployees, payments: mockPayments });
+          setLoading(false);
+        }, 1000);
+        return;
       }
-    };
+
+      // Fetch real data from Supabase
+      console.log('Fetching fund collection data from Supabase...');
+
+      // Get all employees (so we can show inactive/left ones as "completed")
+      const employeesResponse = await supabase
+        .from('employees')
+        .select('*');
+
+      console.log('Employees response:', employeesResponse);
+      if (employeesResponse.error) {
+        console.error('Employees error:', employeesResponse.error);
+        throw employeesResponse.error;
+      }
+
+      // Get payments with employee info for all employees
+      const paymentsResponse = await supabase
+        .from('fund_payments')
+        .select(`
+            *,
+            employees!inner(name, department)
+          `)
+        .order('created_at', { ascending: false });
+
+      console.log('Payments response:', paymentsResponse);
+      if (paymentsResponse.error) {
+        console.error('Payments error:', paymentsResponse.error);
+        throw paymentsResponse.error;
+      }
+
+      const employeesData = employeesResponse.data || [];
+      const paymentsData = paymentsResponse.data || [];
+
+      setRawData({ employees: employeesData, payments: paymentsData });
+      setLoading(false);
+
+    } catch (error) {
+      console.error('Error fetching fund collection data:', error);
+      // Fall back to mock data on error
+      const mockEmployees = [
+        {
+          id: 1,
+          name: 'Nguyễn Văn A',
+          department: 'IT',
+          monthly_contribution: 100000,
+          total_paid: 300000,
+          current_month_status: 'paid',
+          last_payment_date: '2024-01-05'
+        }
+      ];
+      setRawData({ employees: mockEmployees, payments: [] });
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchFundCollectionData();
@@ -168,7 +166,7 @@ const FundCollectionPage = () => {
   // Process data when rawData or filters change
   useEffect(() => {
     const { employees: employeesData, payments: paymentsData } = rawData;
-    
+
     // Process payments data to add employee info
     const processedPayments = paymentsData?.map(payment => ({
       ...payment,
@@ -177,21 +175,21 @@ const FundCollectionPage = () => {
       amount: Number(payment.amount),
       recorded_by: 'Admin' // Will be dynamic in future
     })) || [];
-    
+
     setPayments(processedPayments);
 
     // Determine target month/year for status calculation
     let targetMonth = new Date().getMonth(); // Default to current month (0-11)
     let targetYear = new Date().getFullYear();
-    
+
     if (monthFilter !== 'all') {
       const selectedMonth = parseInt(monthFilter.replace('T', ''));
       targetMonth = selectedMonth - 1; // Convert 1-12 to 0-11
     }
 
     const processedEmployees = employeesData?.map(employee => {
-      // If employee has left (has leave_date), set status accordingly
-      if (employee.leave_date) {
+      // If employee has left (has leave_date), or is marked inactive / not in fund
+      if (employee.leave_date || employee.status === 'inactive' || !employee.participates_in_fund) {
         return {
           ...employee,
           monthly_contribution: Number(employee.monthly_contribution_amount),
@@ -204,7 +202,7 @@ const FundCollectionPage = () => {
       // For active employees, calculate payment status
       // Get all payments for this employee
       const employeePayments = processedPayments.filter(p => p.employee_id === employee.id) || [];
-      
+
       // Find latest payment
       const latestPayment = employeePayments
         .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
@@ -226,23 +224,23 @@ const FundCollectionPage = () => {
         const daysSinceLastPayment = Math.floor(
           (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
         );
-        
+
         if (lastPaymentDate > now) {
           status = 'paid';
         } else if (daysSinceLastPayment > 45) {
           status = 'overdue';
         }
       } else if (monthFilter !== 'all') {
-         // If a specific month is selected and not paid, it's pending (or overdue if in past)
-         // For simplicity, just mark as pending if not paid for that month
-         status = 'pending';
-         
-         // Optional: Check if target month is in the past to mark overdue
-         const today = new Date();
-         const targetDate = new Date(targetYear, targetMonth + 1, 0); // End of target month
-         if (targetDate < today && !isTargetMonthCovered) {
-             status = 'overdue';
-         }
+        // If a specific month is selected and not paid, it's pending (or overdue if in past)
+        // For simplicity, just mark as pending if not paid for that month
+        status = 'pending';
+
+        // Optional: Check if target month is in the past to mark overdue
+        const today = new Date();
+        const targetDate = new Date(targetYear, targetMonth + 1, 0); // End of target month
+        if (targetDate < today && !isTargetMonthCovered) {
+          status = 'overdue';
+        }
       }
 
       return {
@@ -325,7 +323,7 @@ const FundCollectionPage = () => {
   console.log('Calculating total fund collection...');
   console.log('Employees data:', employees.map(e => ({ name: e.name, status: e.status, total_paid: e.total_paid, leave_date: e.leave_date })));
   console.log('Payments data:', payments.map(p => ({ employee_name: p.employee_name, amount: p.amount })));
-  
+
   // For employees who left (have leave_date), use their calculated total_paid
   const employeesWhoLeft = employees.filter(e => e.leave_date);
   const totalsFromLeavers = employeesWhoLeft.reduce((sum, employee) => {
@@ -333,7 +331,7 @@ const FundCollectionPage = () => {
     console.log(`Employee who left: ${employee.name}, total_paid: ${total}`);
     return sum + total;
   }, 0);
-  
+
   // For active employees, use manual payments (avoid double counting with leavers)
   const activeEmployeeIds = employees.filter(e => !e.leave_date).map(e => e.id);
   const paymentsFromActiveEmployees = payments
@@ -342,35 +340,36 @@ const FundCollectionPage = () => {
       console.log(`Payment from active employee: ${payment.employee_name}, amount: ${payment.amount}`);
       return sum + payment.amount;
     }, 0);
-  
+
   const totalCollected = totalsFromLeavers + paymentsFromActiveEmployees;
-  
+
   console.log('Calculation breakdown:', {
     totalsFromLeavers,
     paymentsFromActiveEmployees,
     totalCollected
   });
-  
+
   const currentMonthCollected = payments
-    .filter(p => new Date(p.payment_date).getMonth() === new Date().getMonth() && 
-                 new Date(p.payment_date).getFullYear() === new Date().getFullYear())
+    .filter(p => new Date(p.payment_date).getMonth() === new Date().getMonth() &&
+      new Date(p.payment_date).getFullYear() === new Date().getFullYear())
     .reduce((sum, p) => sum + p.amount, 0);
-  
-  // Employee status calculations (exclude employees who left)
-  const activeEmployees = employees.filter(e => !e.leave_date); // Only count active employees
+
+  // Employee status calculations 
+  // We exclude employees who are "completed" from active calculation pools
+  const activeEmployees = employees.filter(e => e.current_month_status !== 'completed');
   const paidEmployees = activeEmployees.filter(e => e.current_month_status === 'paid').length;
   const pendingEmployees = activeEmployees.filter(e => e.current_month_status === 'pending').length;
   const overdueEmployees = activeEmployees.filter(e => e.current_month_status === 'overdue').length;
   const completedEmployees = employees.filter(e => e.current_month_status === 'completed').length;
-  
+
   // Advanced calculations (based on active employees only)
   const expectedMonthlyTotal = activeEmployees.length * 100000; // Default 100k VND per active employee
   const collectionRate = activeEmployees.length > 0 ? (paidEmployees / activeEmployees.length) * 100 : 0;
   const averagePaymentAmount = payments.length > 0 ? totalCollected / payments.length : 0;
   const totalOutstanding = pendingEmployees * 100000 + overdueEmployees * 100000;
-  
+
   // Monthly trend calculation (last 6 months)
-  const last6Months = Array.from({length: 6}, (_, i) => {
+  const last6Months = Array.from({ length: 6 }, (_, i) => {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
     return {
@@ -378,13 +377,13 @@ const FundCollectionPage = () => {
       collected: payments
         .filter(p => {
           const paymentDate = new Date(p.payment_date);
-          return paymentDate.getMonth() === date.getMonth() && 
-                 paymentDate.getFullYear() === date.getFullYear();
+          return paymentDate.getMonth() === date.getMonth() &&
+            paymentDate.getFullYear() === date.getFullYear();
         })
         .reduce((sum, p) => sum + p.amount, 0)
     };
   }).reverse();
-  
+
   // Payment method distribution
   const paymentMethodStats = {
     cash: payments.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + p.amount, 0),
@@ -394,30 +393,30 @@ const FundCollectionPage = () => {
 
   const filteredEmployees = employees.filter(employee => {
     return employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           employee.department.toLowerCase().includes(searchTerm.toLowerCase());
+      employee.department.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   // Filter payments based on search and filters - with null safety
   const filteredPayments = payments.filter(payment => {
     if (!payment) return false;
-    
+
     // Text search - with null safety
     const employeeName = payment.employee_name || '';
     const employeeDepartment = payment.employee_department || '';
     const notes = payment.notes || '';
     const matchesSearch = searchTerm === '' ||
-                         employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         employeeDepartment.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         notes.toLowerCase().includes(searchTerm.toLowerCase());
-    
+      employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      employeeDepartment.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      notes.toLowerCase().includes(searchTerm.toLowerCase());
+
     // Payment method filter
     const paymentMethod = payment.payment_method || '';
     const matchesPaymentMethod = paymentFilter === 'all' || paymentMethod === paymentFilter;
-    
+
     // Employee filter - UUID string comparison
-    const matchesEmployee = selectedEmployeeId === null || 
-                           String(payment.employee_id) === String(selectedEmployeeId);
-    
+    const matchesEmployee = selectedEmployeeId === null ||
+      String(payment.employee_id) === String(selectedEmployeeId);
+
     // Date filter - with null safety
     let matchesDate = true;
     if (payment.payment_date && dateFilter !== 'all') {
@@ -426,7 +425,7 @@ const FundCollectionPage = () => {
         const today = new Date();
         const oneWeekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         const oneMonthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-        
+
         if (dateFilter === 'today') {
           matchesDate = paymentDate.toDateString() === today.toDateString();
         } else if (dateFilter === 'week') {
@@ -450,18 +449,18 @@ const FundCollectionPage = () => {
         if (payment.months_covered && Array.isArray(payment.months_covered)) {
           matchesMonth = payment.months_covered.some(m => m.endsWith(`-${monthString}`));
         } else if (payment.payment_date) {
-           // Fallback to payment date if months_covered is missing
-           const paymentDate = new Date(payment.payment_date);
-           matchesMonth = (paymentDate.getMonth() + 1) === selectedMonth;
+          // Fallback to payment date if months_covered is missing
+          const paymentDate = new Date(payment.payment_date);
+          matchesMonth = (paymentDate.getMonth() + 1) === selectedMonth;
         } else {
-           matchesMonth = false;
+          matchesMonth = false;
         }
       } catch (error) {
         console.warn('Invalid data for month filter:', error);
         matchesMonth = false;
       }
     }
-    
+
     console.log(`Filter debug for payment ${payment.id}:`, {
       employeeName,
       searchTerm,
@@ -480,7 +479,7 @@ const FundCollectionPage = () => {
       matchesMonth,
       finalResult: matchesSearch && matchesPaymentMethod && matchesEmployee && matchesDate && matchesMonth
     });
-    
+
     return matchesSearch && matchesPaymentMethod && matchesEmployee && matchesDate && matchesMonth;
   });
 
@@ -507,8 +506,8 @@ const FundCollectionPage = () => {
   const handlePaymentSubmit = async (paymentData) => {
     try {
       // Check if we're in development mode
-      const isDevelopmentMode = 
-        !import.meta.env.VITE_SUPABASE_URL || 
+      const isDevelopmentMode =
+        !import.meta.env.VITE_SUPABASE_URL ||
         import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
         import.meta.env.VITE_DEV_MODE === 'true';
 
@@ -536,7 +535,7 @@ const FundCollectionPage = () => {
       // Refresh data without full reload and close modal
       await fetchFundCollectionData();
       setShowPaymentModal(false);
-      
+
     } catch (error) {
       console.error('Error recording payment:', error);
       alert('Error recording payment: ' + error.message);
@@ -644,7 +643,7 @@ const FundCollectionPage = () => {
               Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()}
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-3">
@@ -654,7 +653,7 @@ const FundCollectionPage = () => {
               <p className="text-sm font-medium text-gray-900">Đã Nộp</p>
               <p className="text-xs text-gray-500">Đã hoàn thành</p>
             </div>
-            
+
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-3">
                 <Clock className="h-8 w-8 text-yellow-600" />
@@ -663,7 +662,7 @@ const FundCollectionPage = () => {
               <p className="text-sm font-medium text-gray-900">Chờ Nộp</p>
               <p className="text-xs text-gray-500">Trong thời hạn</p>
             </div>
-            
+
             <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-3">
                 <AlertTriangle className="h-8 w-8 text-red-600" />
@@ -690,7 +689,7 @@ const FundCollectionPage = () => {
               <span>{Math.round(activeEmployees.length > 0 ? (paidEmployees / activeEmployees.length) * 100 : 0)}%</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className="bg-green-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${activeEmployees.length > 0 ? (paidEmployees / activeEmployees.length) * 100 : 0}%` }}
               ></div>
@@ -699,27 +698,27 @@ const FundCollectionPage = () => {
 
           {/* Quick Actions */}
           <div className="flex flex-wrap gap-2">
-            <button 
+            <button
               onClick={() => setSelectedEmployeeId(null)}
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200"
             >
               <UserCheck className="h-3 w-3 mr-1" />
               Tất cả
             </button>
-            <button 
+            <button
               onClick={() => setSearchTerm('')}
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-green-700 bg-green-100 hover:bg-green-200"
             >
               <CheckCircle className="h-3 w-3 mr-1" />
               Đã nộp ({paidEmployees})
             </button>
-            <button 
+            <button
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200"
             >
               <Clock className="h-3 w-3 mr-1" />
               Chờ nộp ({pendingEmployees})
             </button>
-            <button 
+            <button
               className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200"
             >
               <AlertTriangle className="h-3 w-3 mr-1" />
@@ -815,23 +814,23 @@ const FundCollectionPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {formatDate(employee.last_payment_date)}
                     </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         {employee.current_month_status === 'paid' && <CheckCircle className="h-4 w-4 text-green-500 mr-2" />}
                         {employee.current_month_status === 'pending' && <Clock className="h-4 w-4 text-yellow-500 mr-2" />}
                         {employee.current_month_status === 'overdue' && <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />}
                         {employee.current_month_status === 'completed' && <CheckCircle className="h-4 w-4 text-blue-500 mr-2" />}
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(employee.current_month_status)}`}>
-                          {employee.current_month_status === 'paid' ? 'Đã nộp' : 
-                           employee.current_month_status === 'pending' ? 'Chờ nộp' : 
-                           employee.current_month_status === 'overdue' ? 'Quá hạn' : 
-                           employee.current_month_status === 'completed' ? 'Hoàn thành' : 'Không xác định'}
+                          {employee.current_month_status === 'paid' ? 'Đã nộp' :
+                            employee.current_month_status === 'pending' ? 'Chờ nộp' :
+                              employee.current_month_status === 'overdue' ? 'Quá hạn' :
+                                employee.current_month_status === 'completed' ? 'Hoàn thành' : 'Không xác định'}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       {employee.current_month_status !== 'paid' && employee.current_month_status !== 'completed' && (
-                        <button 
+                        <button
                           onClick={() => setShowPaymentModal(true)}
                           className="text-indigo-600 hover:text-indigo-900"
                         >
@@ -841,7 +840,7 @@ const FundCollectionPage = () => {
                     </td>
                   </tr>
                 ))
-              }
+                }
               </tbody>
               <tfoot className="bg-gray-100">
                 <tr>
@@ -879,7 +878,7 @@ const FundCollectionPage = () => {
                 </button>
               </div>
             </div>
-            
+
             {/* Advanced Filters */}
             <div className="flex flex-wrap gap-4 mb-4">
               <select
@@ -957,7 +956,7 @@ const FundCollectionPage = () => {
               )}
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -1049,7 +1048,7 @@ const FundCollectionPage = () => {
                     </td>
                   </tr>
                 )}
-                
+
                 {/* Total Row */}
                 {filteredPayments.length > 0 && (
                   <tr className="bg-gray-50 border-t-2 border-gray-300">
