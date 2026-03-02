@@ -227,6 +227,8 @@ const HomePage = () => {
           .select('*');
 
         console.log('Expenses response:', expensesResponse);
+        const expensesData = expensesResponse.data || [];
+
         // Identify expenses that are NOT in a pending bill sharing.
         // If an expense is in a pending bill, it shouldn't deduct from "Số Dư Hiện Tại" yet.
         const totalSpentNet = (expensesData || []).reduce((sum, e) => {
