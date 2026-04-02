@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../supabase';
+import { formatVND } from '../utils/format';
 import { Users, DollarSign, Cake, Check, X, BadgeCheck, Eye, Clipboard } from 'lucide-react';
 
 const BillSharingPage = () => {
@@ -389,7 +390,7 @@ const BillSharingPage = () => {
     setPaymentBreakdown(breakdown.sort((a, b) => a.name.localeCompare(b.name)));
   }, [selectedExpenses, selectedEmployees, birthdayPeople, expenses, employees]);
 
-  const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+
 
   return (
     <Layout>

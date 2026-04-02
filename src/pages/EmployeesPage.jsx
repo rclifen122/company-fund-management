@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import EmployeeModal from '../components/EmployeeModal';
 import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
+import { formatVND, formatDate } from '../utils/format';
+import { getStatusColor, getPaymentStatusColor, getDepartmentColor } from '../utils/helpers';
 import { Search, Plus, Edit, Trash2, Users, Phone, Mail, DollarSign } from 'lucide-react';
 
 const EmployeesPage = () => {
@@ -193,12 +196,7 @@ const EmployeesPage = () => {
 
   // Realtime updates: refresh data on employees/payments changes
   useEffect(() => {
-    const isDevelopmentMode =
-      !import.meta.env.VITE_SUPABASE_URL ||
-      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-      import.meta.env.VITE_DEV_MODE === 'true';
-
-    if (isDevelopmentMode) return;
+    if (isDevelopmentMode()) return;
 
     const employeesChannel = supabase
       .channel('employees-changes')
@@ -220,17 +218,7 @@ const EmployeesPage = () => {
     };
   }, []);
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('vi-VN');
-  };
 
   // Handle employee submission (create or update)
   const handleEmployeeSubmit = async (employeeData) => {
@@ -360,34 +348,7 @@ const EmployeesPage = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      active: 'bg-green-100 text-green-800',
-      inactive: 'bg-gray-100 text-gray-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
 
-  const getPaymentStatusColor = (status) => {
-    const colors = {
-      paid: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      overdue: 'bg-red-100 text-red-800',
-      inactive: 'bg-gray-100 text-gray-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getDepartmentColor = (department) => {
-    const colors = {
-      'IT': 'bg-blue-100 text-blue-800',
-      'HR': 'bg-purple-100 text-purple-800',
-      'Finance': 'bg-green-100 text-green-800',
-      'Marketing': 'bg-pink-100 text-pink-800',
-      'Sales': 'bg-orange-100 text-orange-800'
-    };
-    return colors[department] || 'bg-gray-100 text-gray-800';
-  };
 
   const filteredEmployees = employees.filter(employee => {
     const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

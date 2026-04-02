@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -9,17 +10,12 @@ const LoginPage = () => {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // Check if we're in development mode
-  const isDevelopmentMode = !import.meta.env.VITE_SUPABASE_URL || 
-                           import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-                           import.meta.env.VITE_DEV_MODE === 'true';
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     
-    if (isDevelopmentMode) {
+    if (isDevelopmentMode()) {
       // Development mode - simulate login
       setTimeout(() => {
         setLoading(false);
@@ -51,7 +47,7 @@ const LoginPage = () => {
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900">Company Fund Management</h1>
           <p className="mt-2 text-sm text-gray-600">Sign in to your account</p>
-          {isDevelopmentMode && (
+          {isDevelopmentMode() && (
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
               <p className="text-sm text-blue-700">
                 <strong>Demo Mode:</strong> Click login with any credentials to continue

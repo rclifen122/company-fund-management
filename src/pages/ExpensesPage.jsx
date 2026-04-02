@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
+import { formatVND, formatDate } from '../utils/format';
 import { Plus, Receipt, Calendar, DollarSign, TrendingDown, Search, Filter, FileText, Edit, Trash2, Banknote } from 'lucide-react';
 
 const ExpensesPage = () => {
@@ -52,8 +53,7 @@ const ExpensesPage = () => {
     };
   }, []);
 
-  const formatVND = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
-  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('vi-VN');
+
 
   const getSharingStatusBadge = (status) => {
     const statusStyles = {

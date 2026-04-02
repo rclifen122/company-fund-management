@@ -5,6 +5,9 @@ import StatCard from '../components/StatCard';
 import PaymentModal from '../components/PaymentModal';
 import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
+import { formatVND, formatDate } from '../utils/format';
+import { getPaymentStatusColor } from '../utils/helpers';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
 import {
   LineChart,
@@ -41,19 +44,15 @@ const HomePage = () => {
   const [recentActivities, setRecentActivities] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        // Check if we're in development mode
-        const isDevelopmentMode =
-          !import.meta.env.VITE_SUPABASE_URL ||
-          import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-          import.meta.env.VITE_DEV_MODE === 'true';
 
-        if (isDevelopmentMode) {
+        if (isDevelopmentMode()) {
           // Use mock data in development mode
           setStats({
             totalCollected: 1000000,
@@ -512,36 +511,12 @@ const HomePage = () => {
     };
 
     fetchDashboardData();
-  }, []);
+  }, [refreshTrigger]);
 
   if (loading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
-        </div>
-      </Layout>
-    );
-  }
-
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  // Handle payment submission
   const handlePaymentSubmit = async (paymentData) => {
     try {
-      // Check if we're in development mode
-      const isDevelopmentMode =
-        !import.meta.env.VITE_SUPABASE_URL ||
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         console.log('Payment data (Demo mode):', paymentData);
         alert('Payment recorded successfully! (Demo mode)');
         return;
@@ -564,7 +539,7 @@ const HomePage = () => {
       alert('Payment recorded successfully!');
 
       // Refresh the dashboard data
-      window.location.reload();
+      setRefreshTrigger(prev => prev + 1);
 
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -572,16 +547,9 @@ const HomePage = () => {
     }
   };
 
-  // Handle expense submission
   const handleExpenseSubmit = async (expenseData) => {
     try {
-      // Check if we're in development mode
-      const isDevelopmentMode =
-        !import.meta.env.VITE_SUPABASE_URL ||
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         console.log('Expense data (Demo mode):', expenseData);
         alert('Expense recorded successfully! (Demo mode)');
         return;
@@ -610,7 +578,7 @@ const HomePage = () => {
       alert('Expense recorded successfully!');
 
       // Refresh the dashboard data
-      window.location.reload();
+      setRefreshTrigger(prev => prev + 1);
 
     } catch (error) {
       console.error('Error recording expense:', error);
@@ -715,42 +683,6 @@ const HomePage = () => {
             icon={Users}
           />
         </div>
-
-        {/* Alert Cards */}
-        {(stats.overdueCount > 0 || stats.currentBalance < 200000) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {stats.overdueCount > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-center">
-                  <AlertTriangle className="h-5 w-5 text-red-600 mr-2" />
-                  <div>
-                    <h3 className="text-sm font-medium text-red-800">
-                      Overdue Payments Alert
-                    </h3>
-                    <p className="text-sm text-red-700">
-                      {stats.overdueCount} employee(s) have overdue payments
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            {stats.currentBalance < 200000 && (
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                <div className="flex items-center">
-                  <AlertTriangle className="h-5 w-5 text-orange-600 mr-2" />
-                  <div>
-                    <h3 className="text-sm font-medium text-orange-800">
-                      Low Balance Warning
-                    </h3>
-                    <p className="text-sm text-orange-700">
-                      Fund balance is running low
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Enhanced Payment Status Overview */}
         <div className="bg-white p-6 rounded-lg shadow">

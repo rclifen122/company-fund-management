@@ -12,3 +12,4 @@ CONTEXT_MEMORY.md
 # Data & DB
 db/migrations/*.sql
 db/sql/*.md
+db/sql/*.sql

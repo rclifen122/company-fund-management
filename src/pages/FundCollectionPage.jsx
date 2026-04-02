@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import PaymentModal from '../components/PaymentModal';
 import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
+import { formatVND, formatDate } from '../utils/format';
+import { getPaymentStatusColor } from '../utils/helpers';
 import { Plus, Calendar, TrendingUp, Users, PiggyBank, Search, Filter, Eye, Download, CreditCard, Banknote, Smartphone, CheckCircle, Clock, AlertTriangle, UserCheck } from 'lucide-react';
 
 const FundCollectionPage = () => {
@@ -258,12 +261,7 @@ const FundCollectionPage = () => {
 
   // Realtime updates: refresh data on employees/payments changes
   useEffect(() => {
-    const isDevelopmentMode =
-      !import.meta.env.VITE_SUPABASE_URL ||
-      import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-      import.meta.env.VITE_DEV_MODE === 'true';
-
-    if (isDevelopmentMode) return;
+    if (isDevelopmentMode()) return;
 
     const employeesChannel = supabase
       .channel('employees-changes')
@@ -285,38 +283,6 @@ const FundCollectionPage = () => {
     };
   }, []);
 
-  const formatVND = (value) => {
-    return new Intl.NumberFormat('vi-VN', {
-      style: 'currency',
-      currency: 'VND',
-      minimumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('vi-VN');
-  };
-
-  const getPaymentStatusColor = (status) => {
-    const colors = {
-      paid: 'bg-green-100 text-green-800',
-      pending: 'bg-yellow-100 text-yellow-800',
-      overdue: 'bg-red-100 text-red-800',
-      completed: 'bg-blue-100 text-blue-800' // For employees who left
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getDepartmentColor = (department) => {
-    const colors = {
-      'IT': 'bg-blue-100 text-blue-800',
-      'HR': 'bg-purple-100 text-purple-800',
-      'Finance': 'bg-green-100 text-green-800',
-      'Marketing': 'bg-pink-100 text-pink-800',
-      'Sales': 'bg-orange-100 text-orange-800'
-    };
-    return colors[department] || 'bg-gray-100 text-gray-800';
-  };
 
   // Enhanced Fund Calculations
   // Avoid double counting: Use calculated totals for employees who left, manual payments for active employees
@@ -506,12 +472,7 @@ const FundCollectionPage = () => {
   const handlePaymentSubmit = async (paymentData) => {
     try {
       // Check if we're in development mode
-      const isDevelopmentMode =
-        !import.meta.env.VITE_SUPABASE_URL ||
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         console.log('Payment data (Demo mode):', paymentData);
         alert('Payment recorded successfully! (Demo mode)');
         return;
