@@ -514,6 +514,17 @@ const HomePage = () => {
   }, [refreshTrigger]);
 
   if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-full min-h-screen">
+          <div className="text-xl text-gray-500 flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+            Loading dashboard data...
+          </div>
+        </div>
+      </Layout>
+    );
+  }
   const handlePaymentSubmit = async (paymentData) => {
     try {
       if (isDevelopmentMode()) {
@@ -743,7 +754,7 @@ const HomePage = () => {
           {/* Monthly Trends Chart */}
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Monthly Fund Flow
+              Dòng Tiền Quỹ Hàng Tháng
             </h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -772,7 +783,7 @@ const HomePage = () => {
           {/* Expense Categories Chart */}
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Expenses by Category
+              Chi Phí Theo Danh Mục
             </h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
@@ -813,7 +824,7 @@ const HomePage = () => {
         {/* Recent Activity */}
         <div className="bg-white shadow rounded-lg">
           <div className="px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Recent Activities</h3>
+            <h3 className="text-lg font-medium text-gray-900">Hoạt Động Gần Đây</h3>
           </div>
           <div className="divide-y divide-gray-200">
             {recentActivities.map((activity) => (

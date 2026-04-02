@@ -20,12 +20,12 @@ const Layout = ({ children }) => {
   const navigate = useNavigate();
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
-    { name: 'Employees', href: '/employees', icon: Users },
-    { name: 'Fund Collection', href: '/fund-collection', icon: PiggyBank },
-    { name: 'Expenses', href: '/expenses', icon: Receipt },
-    { name: 'Bill Sharing', href: '/bill-sharing', icon: Share2 },
-    { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Bảng Điều Khiển', href: '/', icon: Home },
+    { name: 'Nhân Viên', href: '/employees', icon: Users },
+    { name: 'Thu Quỹ', href: '/fund-collection', icon: PiggyBank },
+    { name: 'Chi Phí', href: '/expenses', icon: Receipt },
+    { name: 'Chia Tiền', href: '/bill-sharing', icon: Share2 },
+    { name: 'Cài Đặt', href: '/settings', icon: Settings },
   ];
 
   const handleSignOut = async () => {
@@ -74,7 +74,7 @@ const Layout = ({ children }) => {
               className="group flex w-full items-center px-2 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-50 hover:text-gray-900"
             >
               <LogOut className="mr-3 h-5 w-5" />
-              Sign Out
+              Đăng Xuất
             </button>
           </div>
         </div>
@@ -113,7 +113,7 @@ const Layout = ({ children }) => {
                 className="group flex w-full items-center px-2 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-50 hover:text-gray-900"
               >
                 <LogOut className="mr-3 h-5 w-5" />
-                Sign Out
+                Đăng Xuất
               </button>
             </div>
           </div>
@@ -136,7 +136,7 @@ const Layout = ({ children }) => {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
                 <User className="h-8 w-8 text-gray-400" />
-                <span className="text-sm font-medium text-gray-700">Welcome back!</span>
+                <span className="text-sm font-medium text-gray-700">Chào mừng trở lại!</span>
               </div>
             </div>
           </div>
