@@ -4,7 +4,7 @@ import PaymentModal from '../components/PaymentModal';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND, formatDate } from '../utils/format';
-import { getPaymentStatusColor } from '../utils/helpers';
+import { getPaymentStatusColor, getDepartmentColor } from '../utils/helpers';
 import { Plus, Calendar, TrendingUp, Users, PiggyBank, Search, Filter, Eye, Download, CreditCard, Banknote, Smartphone, CheckCircle, Clock, AlertTriangle, UserCheck } from 'lucide-react';
 
 const FundCollectionPage = () => {
@@ -722,25 +722,25 @@ const FundCollectionPage = () => {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Employee
+                    Nhân Viên
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Department
+                    Phòng Ban
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monthly Contribution
+                    Mức Đóng Tháng
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Paid
+                    Tổng Đã Đóng
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Last Payment
+                    Lần Đóng Cuối
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                    Trạng Thái
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
+                    Thao Tác
                   </th>
                 </tr>
               </thead>

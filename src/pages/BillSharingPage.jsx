@@ -740,10 +740,10 @@ const BillSharingPage = () => {
                       <table className="min-w-full">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Description</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Category</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Date</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Amount</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Mô Tả</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Danh Mục</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Ngày</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Số Tiền</th>
                           </tr>
                         </thead>
                         <tbody>
