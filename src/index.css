@@ -1,10 +1,18 @@
+/* Import Inter font — self-hosted, no external CDN dependency */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Clean Tailwind v3 setup - remove default Vite styles that conflict */
+/* Base styles */
 html {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -12,10 +20,54 @@ body {
   padding: 0;
 }
 
-/* Custom utilities for Vietnamese currency formatting */
+/* Dark mode transition for smooth theme switching */
+html.dark {
+  color-scheme: dark;
+}
+
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Opt out of global transition for animations that need their own timing */
+.no-color-transition,
+.no-color-transition * {
+  transition-property: none !important;
+}
+
+/* Custom utilities */
 @layer utilities {
   .currency-vnd {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* Custom scrollbar for modern look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }

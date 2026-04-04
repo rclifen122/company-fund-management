@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import PageTransition from '../components/PageTransition';
 import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
 import { formatVND, formatDate } from '../utils/format';
@@ -126,22 +127,22 @@ const ExpensesPage = () => {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <PageTransition className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Quản Lý Chi Phí</h1>
-            <p className="mt-1 text-sm text-gray-500">Tổng chi ròng: {formatVND(totalNetExpenses)}</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Quản Lý Chi Phí</h1>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Tổng chi ròng: {formatVND(totalNetExpenses)}</p>
           </div>
-          <button onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700">
+          <button onClick={() => { setEditingExpense(null); setShowExpenseModal(true); }} className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-xl shadow-sm text-white bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 transition-all duration-200">
             <Plus className="h-4 w-4 mr-2" />
             Nhập Chi Phí
           </button>
         </div>
 
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800/80 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50/80 dark:bg-gray-700/30">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ngày</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mô Tả</th>
@@ -152,9 +153,9 @@ const ExpensesPage = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao Tác</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-800/80 divide-y divide-gray-100 dark:divide-gray-700/50">
                 {expenses.map((expense) => (
-                  <tr key={expense.id} className="hover:bg-gray-50">
+                  <tr key={expense.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors duration-150">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(expense.expense_date)}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{expense.description}</div>
@@ -184,7 +185,7 @@ const ExpensesPage = () => {
           expense={editingExpense}
           isEditing={!!editingExpense}
         />
-      </div>
+      </PageTransition>
     </Layout>
   );
 };
