@@ -452,6 +452,7 @@ const BillSharingPage = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
                 {employees
+                  .filter(emp => emp.status === 'active' && !emp.leave_date)
                   .filter(emp => participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
                   .map(emp => (
                   <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
@@ -502,6 +503,7 @@ const BillSharingPage = () => {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
                 {employees
+                  .filter(emp => emp.status === 'active' && !emp.leave_date)
                   .filter(e => selectedEmployees.has(e.id))
                   .filter(emp => birthdayTypeFilter === 'all' ? true : birthdayTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
                   .map(emp => (
