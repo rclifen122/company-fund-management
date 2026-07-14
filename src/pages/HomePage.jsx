@@ -68,7 +68,7 @@ const HomePage = () => {
             collectionRate: 66.7,
             expenseRate: 42.5,
             monthlyGrowth: 15.2,
-            projectedBalance: 550000
+            projectedBalance: 825000
           });
 
           setMonthlyData([
@@ -661,11 +661,11 @@ const HomePage = () => {
           </StaggerItem>
           <StaggerItem>
             <StatCard
-              title="Số Dư Hiện Tại"
-              value={formatVND(stats.currentBalance)}
-              subValue={stats.currentBalance !== stats.projectedBalance ? `Dự kiến: ${formatVND(stats.projectedBalance)}` : null}
-              change={stats.currentBalance >= 0 ? "Dương tính" : "Âm tính"}
-              changeType={stats.currentBalance >= 0 ? "positive" : "negative"}
+              title="Số Dư Sau Khi Hoàn Tất Bill Chia"
+              value={formatVND(stats.projectedBalance)}
+              subValue={`Số dư hiện tại (chưa tính bill đang chia): ${formatVND(stats.currentBalance)}`}
+              change={stats.projectedBalance >= 0 ? "Dương tính" : "Âm tính"}
+              changeType={stats.projectedBalance >= 0 ? "positive" : "negative"}
               icon={Target}
             />
           </StaggerItem>
