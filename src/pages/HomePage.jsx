@@ -654,7 +654,7 @@ const HomePage = () => {
             <StatCard
               title="Tổng Chi Phí"
               value={formatVND(stats.totalExpenses)}
-              change={`${stats.expenseRate}% quỹ đã dùng`}
+              change={`${Number(stats.expenseRate.toFixed(2))}% quỹ đã dùng`}
               changeType="negative"
               icon={Receipt}
             />
