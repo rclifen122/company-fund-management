@@ -12,6 +12,7 @@ const FundCollectionPage = () => {
   const [employees, setEmployees] = useState([]);
   const [rawData, setRawData] = useState({ employees: [], payments: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState('current');
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,14 +25,9 @@ const FundCollectionPage = () => {
   const fetchFundCollectionData = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
 
-      // Check if we're in development mode
-      const isDevelopmentMode =
-        !import.meta.env.VITE_SUPABASE_URL ||
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         // Use mock data in development mode
         const mockEmployees = [
           {
@@ -145,19 +141,8 @@ const FundCollectionPage = () => {
 
     } catch (error) {
       console.error('Error fetching fund collection data:', error);
-      // Fall back to mock data on error
-      const mockEmployees = [
-        {
-          id: 1,
-          name: 'Nguyễn Văn A',
-          department: 'IT',
-          monthly_contribution: 100000,
-          total_paid: 300000,
-          current_month_status: 'paid',
-          last_payment_date: '2024-01-05'
-        }
-      ];
-      setRawData({ employees: mockEmployees, payments: [] });
+      setRawData({ employees: [], payments: [] });
+      setLoadError(error.message || 'Unable to load fund collection data.');
       setLoading(false);
     }
   };
@@ -211,9 +196,9 @@ const FundCollectionPage = () => {
         .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
 
       // Check if target month is covered by any payment
-      const targetMonthKey = `-${String(targetMonth + 1).padStart(2, '0')}`; // e.g. "-10"
+      const targetMonthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
       const isTargetMonthCovered = employeePayments.some(payment => {
-        return payment.months_covered && payment.months_covered.some(m => m.endsWith(targetMonthKey));
+        return payment.months_covered && payment.months_covered.includes(targetMonthKey);
       });
 
       // Determine status based on target month coverage
@@ -284,36 +269,8 @@ const FundCollectionPage = () => {
   }, []);
 
 
-  // Enhanced Fund Calculations
-  // Avoid double counting: Use calculated totals for employees who left, manual payments for active employees
-  console.log('Calculating total fund collection...');
-  console.log('Employees data:', employees.map(e => ({ name: e.name, status: e.status, total_paid: e.total_paid, leave_date: e.leave_date })));
-  console.log('Payments data:', payments.map(p => ({ employee_name: p.employee_name, amount: p.amount })));
-
-  // For employees who left (have leave_date), use their calculated total_paid
-  const employeesWhoLeft = employees.filter(e => e.leave_date);
-  const totalsFromLeavers = employeesWhoLeft.reduce((sum, employee) => {
-    const total = employee.total_paid || 0;
-    console.log(`Employee who left: ${employee.name}, total_paid: ${total}`);
-    return sum + total;
-  }, 0);
-
-  // For active employees, use manual payments (avoid double counting with leavers)
-  const activeEmployeeIds = employees.filter(e => !e.leave_date).map(e => e.id);
-  const paymentsFromActiveEmployees = payments
-    .filter(p => !employeesWhoLeft.find(emp => emp.id === p.employee_id))
-    .reduce((sum, payment) => {
-      console.log(`Payment from active employee: ${payment.employee_name}, amount: ${payment.amount}`);
-      return sum + payment.amount;
-    }, 0);
-
-  const totalCollected = totalsFromLeavers + paymentsFromActiveEmployees;
-
-  console.log('Calculation breakdown:', {
-    totalsFromLeavers,
-    paymentsFromActiveEmployees,
-    totalCollected
-  });
+  // The payment ledger is the single source of truth for collected money.
+  const totalCollected = payments.reduce((sum, payment) => sum + payment.amount, 0);
 
   const currentMonthCollected = payments
     .filter(p => new Date(p.payment_date).getMonth() === new Date().getMonth() &&
@@ -329,10 +286,15 @@ const FundCollectionPage = () => {
   const completedEmployees = employees.filter(e => e.current_month_status === 'completed').length;
 
   // Advanced calculations (based on active employees only)
-  const expectedMonthlyTotal = activeEmployees.length * 100000; // Default 100k VND per active employee
+  const expectedMonthlyTotal = activeEmployees.reduce(
+    (sum, employee) => sum + Number(employee.monthly_contribution || 0),
+    0
+  );
   const collectionRate = activeEmployees.length > 0 ? (paidEmployees / activeEmployees.length) * 100 : 0;
   const averagePaymentAmount = payments.length > 0 ? totalCollected / payments.length : 0;
-  const totalOutstanding = pendingEmployees * 100000 + overdueEmployees * 100000;
+  const totalOutstanding = activeEmployees
+    .filter(employee => ['pending', 'overdue'].includes(employee.current_month_status))
+    .reduce((sum, employee) => sum + Number(employee.monthly_contribution || 0), 0);
 
   // Monthly trend calculation (last 6 months)
   const last6Months = Array.from({ length: 6 }, (_, i) => {
@@ -410,14 +372,15 @@ const FundCollectionPage = () => {
     if (monthFilter !== 'all') {
       try {
         const selectedMonth = parseInt(monthFilter.replace('T', ''));
-        const monthString = String(selectedMonth).padStart(2, '0');
+        const monthKey = `${new Date().getFullYear()}-${String(selectedMonth).padStart(2, '0')}`;
         // Check if months_covered contains the selected month
         if (payment.months_covered && Array.isArray(payment.months_covered)) {
-          matchesMonth = payment.months_covered.some(m => m.endsWith(`-${monthString}`));
+          matchesMonth = payment.months_covered.includes(monthKey);
         } else if (payment.payment_date) {
           // Fallback to payment date if months_covered is missing
           const paymentDate = new Date(payment.payment_date);
-          matchesMonth = (paymentDate.getMonth() + 1) === selectedMonth;
+          matchesMonth = paymentDate.getFullYear() === new Date().getFullYear()
+            && (paymentDate.getMonth() + 1) === selectedMonth;
         } else {
           matchesMonth = false;
         }
@@ -508,6 +471,17 @@ const FundCollectionPage = () => {
       <Layout>
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center h-64 gap-4">
+          <p className="text-red-600">Unable to load fund collection data: {loadError}</p>
+          <button onClick={fetchFundCollectionData} className="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700">Retry</button>
         </div>
       </Layout>
     );

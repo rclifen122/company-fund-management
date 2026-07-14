@@ -68,7 +68,8 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
     return yearDiff * 12 + monthDiff + 1; // +1 to include the start month
   };
 
-  // Calculate total contribution based on join and leave dates
+  // Display-only estimate. Actual paid totals come exclusively from the
+  // fund_payments ledger and must never be overwritten by this estimate.
   const calculateTotalContribution = () => {
     if (formData.join_date && formData.leave_date && formData.monthly_contribution_amount) {
       const months = calculateMonthsBetween(formData.join_date, formData.leave_date);
@@ -127,12 +128,10 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
 
     setIsSubmitting(true);
     try {
-      // Prepare form data with calculated total_paid if leave_date is provided
       const submissionData = { ...formData };
       
-      // If employee has leave date, calculate total contribution and set status to inactive
+      // Leaving the company changes membership status, not payment history.
       if (formData.leave_date) {
-        submissionData.total_paid = calculateTotalContribution();
         submissionData.status = 'inactive';
       }
       
@@ -339,17 +338,17 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                   Để trống nếu nhân viên vẫn đang hoạt động
                 </p>
                 
-                {/* Show calculated contribution when leave date is entered */}
+                {/* Show a schedule estimate without changing the payment ledger. */}
                 {formData.leave_date && formData.join_date && (
                   <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-md">
                     <p className="text-sm text-blue-800">
-                      <strong>Tự động tính toán:</strong>
+                      <strong>Ước tính theo lịch tham gia:</strong>
                     </p>
                     <p className="text-xs text-blue-600">
                       Số tháng tham gia: {calculateMonthsBetween(formData.join_date, formData.leave_date)} tháng
                     </p>
                     <p className="text-xs text-blue-600">
-                      Tổng số tiền đóng góp: {new Intl.NumberFormat('vi-VN', {
+                      Số tiền dự kiến (không ghi nhận là đã đóng): {new Intl.NumberFormat('vi-VN', {
                         style: 'currency',
                         currency: 'VND',
                         minimumFractionDigits: 0,

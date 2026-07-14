@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Receipt, DollarSign, Calendar, FileText, Tag, Upload } from 'lucide-react';
 
-const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false }) => {
+const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, lockAmount = false }) => {
   const [formData, setFormData] = useState({
     amount: '',
     category: 'events',
@@ -207,7 +207,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false })
                   onChange={handleAmountChange}
                   placeholder="100,000"
                   className="block w-full px-3 py-2 pr-12 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || lockAmount}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                   <span className="text-gray-500 text-sm">VND</span>
@@ -215,6 +215,9 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false })
               </div>
               {errors.amount && (
                 <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
+              )}
+              {lockAmount && (
+                <p className="mt-1 text-sm text-gray-500">Amount is locked while this expense is linked to bill sharing.</p>
               )}
             </div>
 

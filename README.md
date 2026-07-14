@@ -241,19 +241,15 @@ SELECT
 
 #### 3.4 Set Up Row Level Security (RLS)
 
-```sql
--- Enable RLS
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fund_payments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+Do not use `USING (true)` policies for these financial tables. The browser's
+Supabase anon key is public, so authorization must be enforced by RLS and the
+guarded database functions.
 
--- Create policies (admin-only access)
-CREATE POLICY "Admin can view all employees" ON employees FOR ALL USING (true);
-CREATE POLICY "Admin can view all payments" ON fund_payments FOR ALL USING (true);
-CREATE POLICY "Admin can view all expenses" ON expenses FOR ALL USING (true);
-CREATE POLICY "Admin can view profile" ON profiles FOR ALL USING (auth.uid() = id);
-```
+Follow [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md), then apply
+`migrations/V9__security_hardening.sql`, followed by
+`migrations/V10__financial_integrity_hardening.sql`. V9 removes anonymous
+access and introduces guarded RPCs; V10 protects the financial ledger, prevents
+an expense from being shared twice, and fixes view/FK integrity.
 
 ## Bill Sharing Workflow
 
@@ -274,17 +270,25 @@ The Bill Sharing feature lets you split selected expenses among employees, colle
   - The dashboard, monthly chart, and category breakdown all use the expense `net_amount` (amount − amount_reimbursed), so reimbursements effectively flow back to the fund.
 
 - Delete Sharing
-  - Pending sharings can be deleted directly (participants + links are removed).
-  - Finalized sharings can be deleted via rollback: the app calls `delete_bill_sharing(sharing_id_input)` which subtracts the previously applied reimbursements from linked expenses and then deletes the sharing and its children.
+  - Pending and finalized sharings are deleted only through the guarded
+    `delete_bill_sharing(sharing_id_input)` RPC.
+  - Finalized rollback subtracts the immutable `reimbursement_applied` ledger
+    recorded during finalization, then deletes the sharing and its children.
 
 - Schema Notes
   - Tables: `bill_sharing`, `bill_sharing_expenses`, `bill_sharing_participants` with foreign keys and unique constraints.
   - RPCs:
+    - `create_bill_sharing(...)` validates IDs and calculates money server-side
+      in one transaction.
     - `finalize_bill_sharing(sharing_id_input uuid)` applies reimbursements and sets sharing to `finalized`.
+    - `set_bill_sharing_payment_status(...)` rejects finalized sharings and
+      auto-finalizes after the last direct payment.
     - `delete_bill_sharing(sharing_id_input uuid)` rolls back reimbursements (if finalized) and deletes the sharing and its links.
 - Migrations:
     - `db/migrations/2025-09-08_bill_sharing_integrity.sql`
     - `db/migrations/2025-09-08b_bill_sharing_rollback_and_security.sql`
+    - `migrations/V9__security_hardening.sql` (required current security model)
+    - `migrations/V10__financial_integrity_hardening.sql` (required financial integrity model)
 
 ### Bill Sharing UI Enhancements (Sept 2025)
 - Sharing cards show Fund Paid, Direct Collected, Direct Outstanding, and a progress bar before finalize.
@@ -294,8 +298,12 @@ The Bill Sharing feature lets you split selected expenses among employees, colle
 - Selection filters (All/Fund/Direct) and bulk actions in participant and birthday selection lists.
 
 ### Permissions
-- The finalize/delete RPCs are defined as `SECURITY DEFINER` and grant `EXECUTE` to app roles so they can update `expenses` under RLS.
-- A permissive RLS policy on `public.expenses` is included in the migration for admin usage. Tighten to your auth model as needed.
+- Privileged RPCs are `SECURITY DEFINER`, but execution is revoked from
+  `PUBLIC` and `anon`; each function also verifies `auth.uid()` is an admin.
+- RLS is default-deny for anonymous users. Authenticated users must have an
+  explicit admin profile to read or mutate application data.
+- Public email registration should remain disabled in Supabase Auth. Create
+  administrators explicitly and assign their profile role manually.
 
 #### 3.5 Insert Sample Data (Optional)
 

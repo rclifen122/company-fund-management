@@ -45,6 +45,7 @@ const HomePage = () => {
   const [recentActivities, setRecentActivities] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const navigate = useNavigate();
 
@@ -52,6 +53,7 @@ const HomePage = () => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
+        setLoadError(null);
 
         if (isDevelopmentMode()) {
           // Use mock data in development mode
@@ -151,6 +153,8 @@ const HomePage = () => {
         console.log('Recent payments response:', recentPaymentsResponse);
         const allPaymentsData = allPaymentsForChartResponse.data || [];
         const recentPaymentsData = recentPaymentsResponse.data || [];
+        if (allPaymentsForChartResponse.error) throw allPaymentsForChartResponse.error;
+        if (recentPaymentsResponse.error) throw recentPaymentsResponse.error;
 
         console.log('=== RAW DATA SUMMARY ===');
         console.log('Total payments in database:', allPaymentsData.length, allPaymentsData);
@@ -159,59 +163,28 @@ const HomePage = () => {
           latest: allPaymentsData.length > 0 ? Math.max(...allPaymentsData.map(p => new Date(p.payment_date).getTime())) : 'none'
         });
 
-        // Calculate fund summary manually to avoid database view dependency
-        const [summaryResponse, allEmployeesResponse, allPaymentsForSummaryResponse, pendingBillsResponse] = await Promise.all([
-          supabase.from('fund_summary').select('*').single(),
-          supabase.from('employees').select('id, total_paid, leave_date, participates_in_fund'),
-          supabase.from('fund_payments').select('amount, employee_id'), // Get all payments for calculation
-          supabase.from('bill_sharing')
-            .select(`
-              total_amount, 
-              bill_sharing_participants(amount_owed, payment_method),
-              bill_sharing_expenses(expense_id)
-            `)
-            .eq('status', 'pending')
-        ]);
+        // Calculate the fund summary from immutable ledger rows rather than a
+        // cached employee total or a view that may drift from the ledger.
+        const pendingBillsResponse = await supabase.from('bill_sharing')
+          .select('bill_sharing_participants(amount_owed, payment_method)')
+          .eq('status', 'pending');
 
-        console.log('Summary response:', summaryResponse);
-        const summaryData = summaryResponse.data;
-        const allEmployeesData = allEmployeesResponse.data || [];
-        const allPaymentsForSummaryData = allPaymentsForSummaryResponse.data || [];
+        if (pendingBillsResponse.error) throw pendingBillsResponse.error;
 
-        console.log('Raw employees data:', allEmployeesData);
-        console.log('Raw payments for summary data:', allPaymentsForSummaryData);
+        const correctedTotalCollected = allPaymentsData.reduce(
+          (sum, payment) => sum + Number(payment.amount || 0),
+          0
+        );
 
-        // Calculate correct total fund collection using consistent approach
-        // Since employee.total_paid is updated by triggers and has been synced with real payments, 
-        // we use total_paid for ALL employees (both active and who left) as the absolute source of truth
-        const totalCollectedFromAllEmployees = allEmployeesData.reduce((sum, employee) => {
-          return sum + (employee.total_paid || 0);
-        }, 0);
-
-        const correctedTotalCollected = totalCollectedFromAllEmployees;
-
-        // Calculate pending fund deduction from bill sharing
+        // Pending direct payments are future reimbursements, not current cash.
         const pendingBills = pendingBillsResponse.data || [];
 
-        // Identify expenses that are currently in a pending bill sharing
-        const pendingExpenseIds = pendingBills.flatMap(bill =>
-          bill.bill_sharing_expenses?.map(be => be.expense_id) || []
-        );
-        console.log('Expenses in pending bills:', pendingExpenseIds);
-
-        let pendingFundDeduction = 0;
-        pendingBills.forEach(bill => {
-          const totalAmount = bill.total_amount || 0;
-          const participants = bill.bill_sharing_participants || [];
-          // Sum of direct payments
-          const directTotal = participants
+        const pendingDirectReceivables = pendingBills.reduce((total, bill) => {
+          const directTotal = (bill.bill_sharing_participants || [])
             .filter(p => p.payment_method === 'direct')
-            .reduce((sum, p) => sum + (p.amount_owed || 0), 0);
-
-          // Fund covers the rest
-          const fundPortion = Math.max(0, totalAmount - directTotal);
-          pendingFundDeduction += fundPortion;
-        });
+            .reduce((sum, p) => sum + Number(p.amount_owed || 0), 0);
+          return total + directTotal;
+        }, 0);
 
         // Get ALL employees (including those who left) for proper status calculation
         const employeesResponse = await supabase
@@ -220,6 +193,7 @@ const HomePage = () => {
 
         console.log('Employees response:', employeesResponse);
         const employeesData = employeesResponse.data || [];
+        if (employeesResponse.error) throw employeesResponse.error;
 
         // Get ALL expenses for monthly chart calculation
         const expensesResponse = await supabase
@@ -228,19 +202,19 @@ const HomePage = () => {
 
         console.log('Expenses response:', expensesResponse);
         const expensesData = expensesResponse.data || [];
+        if (expensesResponse.error) throw expensesResponse.error;
 
-        // Identify expenses that are NOT in a pending bill sharing.
-        // If an expense is in a pending bill, it shouldn't deduct from "Số Dư Hiện Tại" yet.
+        // Pending sharing does not undo an expense that has already occurred.
+        // Reimbursement reduces net_amount only when finalization succeeds.
         const totalSpentNet = (expensesData || []).reduce((sum, e) => {
-          if (pendingExpenseIds.includes(e.id)) return sum;
           return sum + Number((e.net_amount ?? e.amount) || 0);
         }, 0);
 
         const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
 
         console.log('HomePage fund calculation:', {
-          totalEmployees: allEmployeesData.length,
-          totalCollectedFromAllEmployees,
+          totalEmployees: employeesData.length,
+          correctedTotalCollected,
           totalSpentNet,
           correctedCurrentBalance
         });
@@ -259,7 +233,7 @@ const HomePage = () => {
 
         const processedEmployees = employeesData?.map(employee => {
           // If employee has left (has leave_date), set status accordingly
-          if (employee.leave_date) {
+          if (employee.leave_date || employee.status === 'inactive' || !employee.participates_in_fund) {
             return {
               ...employee,
               current_month_status: 'completed', // Special status for employees who left
@@ -306,7 +280,7 @@ const HomePage = () => {
         }) || [];
 
         // Calculate employee status counts
-        const activeEmployees = processedEmployees.filter(e => !e.leave_date);
+        const activeEmployees = processedEmployees.filter(e => e.current_month_status !== 'completed');
         const paidEmployees = activeEmployees.filter(e => e.current_month_status === 'paid').length;
         const pendingEmployees = activeEmployees.filter(e => e.current_month_status === 'pending').length;
         const overdueEmployees = activeEmployees.filter(e => e.current_month_status === 'overdue').length;
@@ -323,13 +297,16 @@ const HomePage = () => {
             overdueCount: overdueEmployees,
             pendingCount: pendingEmployees,
             completedCount: completedEmployees,
-            expectedMonthly: activeEmployees.length * 100000,
+            expectedMonthly: activeEmployees.reduce(
+              (sum, employee) => sum + Number(employee.monthly_contribution_amount || 0),
+              0
+            ),
             collectionRate: activeEmployees.length > 0 ?
               (paidEmployees / activeEmployees.length) * 100 : 0,
             expenseRate: correctedTotalCollected > 0 ?
               (totalSpentNet / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2,
-            projectedBalance: correctedCurrentBalance - pendingFundDeduction
+            projectedBalance: correctedCurrentBalance + pendingDirectReceivables
           };
           console.log('Setting new stats:', newStats);
           setStats(newStats);
@@ -494,20 +471,8 @@ const HomePage = () => {
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        setLoadError(error.message || 'Unable to load dashboard data.');
         setLoading(false);
-        // Fall back to mock data on error
-        setStats({
-          totalCollected: 1000000,
-          totalExpenses: 425000,
-          currentBalance: 575000,
-          totalEmployees: 12,
-          paidThisMonth: 8,
-          overdueCount: 2,
-          expectedMonthly: 1200000,
-          collectionRate: 66.7,
-          expenseRate: 42.5,
-          monthlyGrowth: 15.2
-        });
       }
     };
 
@@ -522,6 +487,17 @@ const HomePage = () => {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
             Loading dashboard data...
           </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Layout>
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+          <p className="text-red-600">Unable to load dashboard data: {loadError}</p>
+          <button onClick={() => setRefreshTrigger(value => value + 1)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Retry</button>
         </div>
       </Layout>
     );

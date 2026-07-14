@@ -109,9 +109,14 @@ const ExpensesPage = () => {
     }
   };
 
-  const handleDeleteExpense = async (expenseId) => {
+  const handleDeleteExpense = async (expense) => {
+    if (expense.sharing_status !== 'not_shared') {
+      alert('Delete the linked bill sharing record before deleting this expense.');
+      return;
+    }
     if (!confirm('Are you sure?')) return;
-    await supabase.from('expenses').delete().eq('id', expenseId);
+    const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+    if (error) alert('Error deleting expense: ' + error.message);
   };
 
   const handleEditExpense = (expense) => {
@@ -167,8 +172,8 @@ const ExpensesPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap">{getSharingStatusBadge(expense.sharing_status)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button onClick={() => handleEditExpense(expense)} className="text-indigo-600 hover:text-indigo-900 p-1 rounded"><Edit className="h-4 w-4" /></button>
-                        <button onClick={() => handleDeleteExpense(expense.id)} className="text-red-600 hover:text-red-900 p-1 rounded"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => handleEditExpense(expense)} title={expense.sharing_status !== 'not_shared' ? 'Edit metadata; amount is locked by bill sharing' : 'Edit expense'} className="text-indigo-600 hover:text-indigo-900 p-1 rounded"><Edit className="h-4 w-4" /></button>
+                        <button onClick={() => handleDeleteExpense(expense)} disabled={expense.sharing_status !== 'not_shared'} title={expense.sharing_status !== 'not_shared' ? 'Delete the linked sharing first' : 'Delete expense'} className="text-red-600 hover:text-red-900 p-1 rounded disabled:text-gray-400 disabled:cursor-not-allowed"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -184,6 +189,7 @@ const ExpensesPage = () => {
           onSubmit={handleExpenseSubmit}
           expense={editingExpense}
           isEditing={!!editingExpense}
+          lockAmount={editingExpense?.sharing_status !== 'not_shared'}
         />
       </PageTransition>
     </Layout>

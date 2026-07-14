@@ -19,9 +19,9 @@ const ProtectedRoute = ({ children }) => {
     }
 
     const init = async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getUser();
       if (!mounted) return;
-      setHasSession(Boolean(data?.session));
+      setHasSession(!error && Boolean(data?.user));
       setReady(true);
     };
     init();

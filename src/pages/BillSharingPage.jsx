@@ -10,7 +10,6 @@ const BillSharingPage = () => {
   const [selectedExpenses, setSelectedExpenses] = useState(new Set());
   const [selectedEmployees, setSelectedEmployees] = useState(new Set());
   const [birthdayPeople, setBirthdayPeople] = useState(new Set());
-  const [participantFilter, setParticipantFilter] = useState('active');
   const [loading, setLoading] = useState(true);
   const [sharingHistory, setSharingHistory] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -21,6 +20,7 @@ const BillSharingPage = () => {
   const [expandedSharings, setExpandedSharings] = useState(new Set());
   const [detailsSharing, setDetailsSharing] = useState(null);
   const [copyingId, setCopyingId] = useState(null);
+  const [updatingParticipantId, setUpdatingParticipantId] = useState(null);
   const [toast, setToast] = useState({ show: false, text: '', type: 'success' });
   const [participantTypeFilter, setParticipantTypeFilter] = useState('all'); // all | fund | direct
   const [birthdayTypeFilter, setBirthdayTypeFilter] = useState('all'); // all | fund | direct
@@ -42,16 +42,21 @@ const BillSharingPage = () => {
     else setSharingHistory(data || []);
   };
 
+  const fetchAvailableExpenses = async () => {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('sharing_status', 'not_shared')
+      .order('expense_date', { ascending: false });
+
+    if (error) console.error('Error fetching expenses:', error);
+    else setExpenses(data || []);
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .order('expense_date', { ascending: false });
-
-      if (expensesError) console.error('Error fetching expenses:', expensesError);
-      else setExpenses(expensesData || []);
+      await fetchAvailableExpenses();
 
       const { data: employeesData, error: employeesError } = await supabase
         .from('employees')
@@ -106,9 +111,9 @@ const BillSharingPage = () => {
   };
 
   const bulkSelectParticipants = (action) => {
-    const filtered = employees.filter(emp =>
-      participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund
-    );
+    const filtered = employees
+      .filter(emp => emp.status === 'active' && !emp.leave_date)
+      .filter(emp => participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund);
     const next = new Set(selectedEmployees);
     if (action === 'select') filtered.forEach(emp => next.add(emp.id));
     if (action === 'clear') filtered.forEach(emp => next.delete(emp.id));
@@ -126,104 +131,49 @@ const BillSharingPage = () => {
   };
 
   const handleCreateSharing = async () => {
+    if (selectedEmployees.size === 1 && birthdayPeople.size === 1) {
+      showToast('A birthday sharing requires at least one other participant', 'error', 3000);
+      return;
+    }
+
     setLoading(true);
     try {
-      // Generate IDs for tables that don't have default UUIDs
-      const genId = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(16).slice(2)}`);
-      const sharingId = genId();
-
-      // Insert main sharing record (explicit id)
-      const { error: sharingError } = await supabase
-        .from('bill_sharing')
-        .insert({ 
-          id: sharingId,
-          total_amount: Number(totalAmount || 0), 
-          sharing_date: new Date().toISOString().split('T')[0], 
-          status: 'pending' 
-        });
-      if (sharingError) throw sharingError;
-
-      // Link selected expenses
-      const expensesToLink = Array.from(selectedExpenses).map(expenseId => ({
-        bill_sharing_id: sharingId,
-        expense_id: expenseId,
-        amount: Number(expenses.find(e => e.id === expenseId)?.amount || 0),
-      }));
-      if (expensesToLink.length > 0) {
-        const { error: linkErr } = await supabase.from('bill_sharing_expenses').insert(expensesToLink);
-        if (linkErr) throw linkErr;
-      }
-
-      // Create participant rows for DIRECT payers only (fund payers are auto-paid and not tracked here)
-      const participantsToCreate = paymentBreakdown
-        .filter(p => p.paymentMethod === 'direct' && Number(p.amountOwed || 0) > 0)
-        .map(p => ({
-          id: genId(),
-          bill_sharing_id: sharingId,
-          employee_id: p.id,
-          amount_owed: Number(p.amountOwed || 0),
-          is_birthday_person: birthdayPeople.has(p.id),
-          payment_method: 'direct',
-          payment_status: 'pending',
-        }));
-      if (participantsToCreate.length > 0) {
-        const { error: partErr } = await supabase.from('bill_sharing_participants').insert(participantsToCreate);
-        if (partErr) throw partErr;
-      }
+      const { error } = await supabase.rpc('create_bill_sharing', {
+        expense_ids_input: Array.from(selectedExpenses),
+        employee_ids_input: Array.from(selectedEmployees),
+        birthday_ids_input: Array.from(birthdayPeople),
+      });
+      if (error) throw error;
 
       showToast('Sharing created successfully', 'success');
       setSelectedExpenses(new Set());
-      fetchSharingHistory();
+      await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
 
     } catch (error) {
       console.error('Error creating sharing record:', error);
-      showToast('Failed to create sharing: ' + error.message, 'error', 3000);
+      showToast('Failed to create sharing. Please try again.', 'error', 3000);
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-finalize a sharing when all direct participants are paid
-  const finalizeIfAllDirectPaid = async (sharingId) => {
-    try {
-      const { data: participants, error } = await supabase
-        .from('bill_sharing_participants')
-        .select('id, payment_status, payment_method')
-        .eq('bill_sharing_id', sharingId);
-      if (error) throw error;
-
-      const directs = (participants || []).filter(p => p.payment_method === 'direct');
-      const allPaid = directs.length === 0 || directs.every(p => p.payment_status === 'paid');
-      if (!allPaid) return;
-
-      const { error: rpcError } = await supabase.rpc('finalize_bill_sharing', { sharing_id_input: sharingId });
-      if (rpcError) throw rpcError;
-      await fetchSharingHistory();
-    } catch (e) {
-      console.error('Auto finalize failed:', e);
-    }
-  };
-
-  const handlePaymentStatusToggle = async (participantId, currentStatus, sharingId) => {
+  const handlePaymentStatusToggle = async (participantId, currentStatus, sharingStatus) => {
+    if (sharingStatus === 'finalized' || updatingParticipantId) return;
     const newStatus = currentStatus === 'paid' ? 'pending' : 'paid';
-    const updatedHistory = sharingHistory.map(sharing => ({
-      ...sharing,
-      bill_sharing_participants: sharing.bill_sharing_participants.map(p => 
-        p.id === participantId ? { ...p, payment_status: newStatus } : p
-      ),
-    }));
-    setSharingHistory(updatedHistory);
-    const { error } = await supabase
-      .from('bill_sharing_participants')
-      .update({ payment_status: newStatus, payment_date: newStatus === 'paid' ? new Date().toISOString() : null })
-      .eq('id', participantId);
-    if (error) {
-      console.error('Error updating payment status:', error);
-      setSharingHistory(sharingHistory);
-      showToast('Failed to update payment status', 'error', 2500);
-    } else if (sharingId) {
+    setUpdatingParticipantId(participantId);
+    try {
+      const { error } = await supabase.rpc('set_bill_sharing_payment_status', {
+        participant_id_input: participantId,
+        payment_status_input: newStatus,
+      });
+      if (error) throw error;
       showToast(newStatus === 'paid' ? 'Marked as Paid' : 'Marked as Pending', 'success');
-      await finalizeIfAllDirectPaid(sharingId);
+      await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      showToast('Failed to update payment status', 'error', 2500);
+    } finally {
+      setUpdatingParticipantId(null);
     }
   };
 
@@ -234,31 +184,13 @@ const BillSharingPage = () => {
     if (!confirm(msg)) return;
     setLoading(true);
     try {
-      if (status === 'finalized') {
-        const { error: rpcErr } = await supabase.rpc('delete_bill_sharing', { sharing_id_input: sharingId });
-        if (rpcErr) throw rpcErr;
-      } else {
-        const { error: pErr } = await supabase
-          .from('bill_sharing_participants')
-          .delete()
-          .eq('bill_sharing_id', sharingId);
-        if (pErr) throw pErr;
-        const { error: eErr } = await supabase
-          .from('bill_sharing_expenses')
-          .delete()
-          .eq('bill_sharing_id', sharingId);
-        if (eErr) throw eErr;
-        const { error: sErr } = await supabase
-          .from('bill_sharing')
-          .delete()
-          .eq('id', sharingId);
-        if (sErr) throw sErr;
-      }
-      await fetchSharingHistory();
+      const { error } = await supabase.rpc('delete_bill_sharing', { sharing_id_input: sharingId });
+      if (error) throw error;
+      await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
       showToast('Sharing deleted successfully', 'success');
     } catch (err) {
       console.error('Error deleting sharing record:', err);
-      showToast('Failed to delete sharing: ' + err.message, 'error', 3000);
+      showToast('Failed to delete sharing. Please try again.', 'error', 3000);
     } finally {
       setLoading(false);
     }
@@ -324,7 +256,7 @@ const BillSharingPage = () => {
       fetchSharingHistory();
     } catch (error) {
       console.error('Error finalizing sharing event:', error);
-      showToast('Failed to finalize: ' + error.message, 'error', 3000);
+      showToast('Failed to finalize. Please try again.', 'error', 3000);
     } finally {
       setLoading(false);
     }
@@ -390,6 +322,7 @@ const BillSharingPage = () => {
     setPaymentBreakdown(breakdown.sort((a, b) => a.name.localeCompare(b.name)));
   }, [selectedExpenses, selectedEmployees, birthdayPeople, expenses, employees]);
 
+  const invalidSingleBirthday = selectedEmployees.size === 1 && birthdayPeople.size === 1;
 
 
   return (
@@ -455,18 +388,18 @@ const BillSharingPage = () => {
                   .filter(emp => emp.status === 'active' && !emp.leave_date)
                   .filter(emp => participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
                   .map(emp => (
-                  <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
-                    <input type="checkbox" id={`emp-${emp.id}`} checked={selectedEmployees.has(emp.id)} onChange={() => handleEmployeeToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                    <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800">{emp.name}</p>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                          {emp.participates_in_fund ? 'Fund' : 'Direct'}
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                ))}
+                    <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
+                      <input type="checkbox" id={`emp-${emp.id}`} checked={selectedEmployees.has(emp.id)} onChange={() => handleEmployeeToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
+                      <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-800">{emp.name}</p>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                            {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  ))}
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
@@ -507,18 +440,18 @@ const BillSharingPage = () => {
                   .filter(e => selectedEmployees.has(e.id))
                   .filter(emp => birthdayTypeFilter === 'all' ? true : birthdayTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
                   .map(emp => (
-                  <div key={emp.id} className={`flex items-center p-3 rounded-md border ${birthdayPeople.has(emp.id) ? 'bg-pink-50 border-pink-300' : 'bg-gray-50'}`}>
-                    <input type="checkbox" id={`bday-${emp.id}`} checked={birthdayPeople.has(emp.id)} onChange={() => handleBirthdayToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500" />
-                    <label htmlFor={`bday-${emp.id}`} className="ml-3">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-800">{emp.name}</p>
-                        <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                          {emp.participates_in_fund ? 'Fund' : 'Direct'}
-                        </span>
-                      </div>
-                    </label>
-                  </div>
-                ))}
+                    <div key={emp.id} className={`flex items-center p-3 rounded-md border ${birthdayPeople.has(emp.id) ? 'bg-pink-50 border-pink-300' : 'bg-gray-50'}`}>
+                      <input type="checkbox" id={`bday-${emp.id}`} checked={birthdayPeople.has(emp.id)} onChange={() => handleBirthdayToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500" />
+                      <label htmlFor={`bday-${emp.id}`} className="ml-3">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-800">{emp.name}</p>
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                            {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
@@ -529,25 +462,28 @@ const BillSharingPage = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between items-center"><p>Total Selected Amount:</p><p className="font-bold text-xl text-indigo-600">{formatVND(totalAmount)}</p></div>
                   <div className="flex justify-between items-center"><p>Amount Per Person:</p><p className="font-bold text-xl text-indigo-600">{formatVND(amountPerPerson)}</p></div>
-                  <hr/>
+                  <hr />
                   <div className="flex justify-between items-center"><p className="text-blue-600 font-semibold">To Be Paid by Fund:</p><p className="font-bold text-blue-600">{formatVND(fundPayment)}</p></div>
                   <div className="flex justify-between items-center"><p className="text-green-600 font-semibold">To Be Paid Directly:</p><p className="font-bold text-green-600">{formatVND(directPayment)}</p></div>
                 </div>
-                <button onClick={handleCreateSharing} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400" disabled={loading || selectedExpenses.size === 0 || selectedEmployees.size === 0}>{loading ? 'Creating...' : 'Create Sharing Record'}</button>
+                {invalidSingleBirthday && (
+                  <p className="mt-4 text-sm text-red-600">A birthday sharing requires at least one other participant.</p>
+                )}
+                <button onClick={handleCreateSharing} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400" disabled={loading || selectedExpenses.size === 0 || selectedEmployees.size === 0 || invalidSingleBirthday}>{loading ? 'Creating...' : 'Create Sharing Record'}</button>
               </div>
               <div className="bg-white p-6 rounded-lg shadow">
-                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Breakdown</h3>
-                 <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {paymentBreakdown.map(p => (
-                      <div key={p.id} className="flex justify-between items-center text-sm">
-                        <div>
-                          <p className="font-medium text-gray-800">{p.name}</p>
-                          <p className={`text-xs font-semibold ${p.paymentMethod === 'fund' ? 'text-blue-600' : 'text-green-600'}`}>{p.paymentMethod === 'fund' ? 'Pay from Fund' : 'Pay Directly'}</p>
-                        </div>
-                        <p className="font-bold text-gray-900">{formatVND(p.amountOwed)}</p>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Breakdown</h3>
+                <div className="space-y-3 max-h-48 overflow-y-auto">
+                  {paymentBreakdown.map(p => (
+                    <div key={p.id} className="flex justify-between items-center text-sm">
+                      <div>
+                        <p className="font-medium text-gray-800">{p.name}</p>
+                        <p className={`text-xs font-semibold ${p.paymentMethod === 'fund' ? 'text-blue-600' : 'text-green-600'}`}>{p.paymentMethod === 'fund' ? 'Pay from Fund' : 'Pay Directly'}</p>
                       </div>
-                    ))}
-                 </div>
+                      <p className="font-bold text-gray-900">{formatVND(p.amountOwed)}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -558,17 +494,19 @@ const BillSharingPage = () => {
             {sharingHistory.map(sharing => {
               const participants = sharing.bill_sharing_participants || [];
               const totalAmount = Number(sharing?.total_amount || 0);
-              const directTotalOwed = participants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
-              const directCollected = participants
+              const directParticipants = participants.filter(p => p?.payment_method === 'direct');
+              const directTotalOwed = directParticipants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+              const directCollected = directParticipants
                 .filter(p => p?.payment_status === 'paid')
                 .reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
               const fundCovered = Math.max(0, totalAmount - directTotalOwed);
               const directOutstanding = Math.max(0, directTotalOwed - directCollected);
               const directProgress = directTotalOwed > 0 ? (directCollected / directTotalOwed) * 100 : 100;
+              const canFinalize = directParticipants.length === 0 || directParticipants.every(p => p?.payment_status === 'paid');
 
               return (
                 <div key={sharing.id} className="border rounded-lg p-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       {/* Linked expense names */}
                       <div className="text-sm text-gray-800 font-medium">
@@ -667,9 +605,9 @@ const BillSharingPage = () => {
                         {copyingId === sharing.id ? 'Copying…' : 'Copy expenses'}
                       </button>
                       <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status || 'pending'}</span>
-                      <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                      <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || !canFinalize || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         <BadgeCheck className="h-4 w-4 mr-2" />
-                        {sharing.status === 'finalized' ? 'Finalized' : 'Finalize & Update'}
+                        {sharing.status === 'finalized' ? 'Finalized' : canFinalize ? 'Finalize & Update' : 'Waiting for Payments'}
                       </button>
                       <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         Delete
@@ -679,20 +617,26 @@ const BillSharingPage = () => {
                   <div className="mt-4">
                     <h4 className="font-semibold mb-2">Participants</h4>
                     <div className="space-y-2">
-                    {sharing.bill_sharing_participants.map(p => (
-                      <div key={p.id} className="flex justify-between items-center">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p>{p.employees.name}</p>
-                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                              {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
-                            </span>
+                      {sharing.bill_sharing_participants.map(p => (
+                        <div key={p.id} className="flex justify-between items-center">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p>{p.employees.name}</p>
+                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                                {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600">Owed: {formatVND(p.amount_owed)}</p>
                           </div>
-                          <p className="text-sm text-gray-600">Owed: {formatVND(p.amount_owed)}</p>
+                          <button
+                            onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.status)}
+                            disabled={sharing.status === 'finalized' || updatingParticipantId === p.id}
+                            className={`px-3 py-1 text-sm rounded-full disabled:cursor-not-allowed disabled:opacity-60 ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}
+                          >
+                            {updatingParticipantId === p.id ? 'Updating…' : p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}
+                          </button>
                         </div>
-                        <button onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.id)} className={`px-3 py-1 text-sm rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>{p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}</button>
-                      </div>
-                    ))}
+                      ))}
                     </div>
                   </div>
                 </div>

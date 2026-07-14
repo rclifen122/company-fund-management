@@ -22,13 +22,7 @@ const EmployeesPage = () => {
       try {
         setLoading(true);
 
-        // Check if we're in development mode
-        const isDevelopmentMode = 
-          !import.meta.env.VITE_SUPABASE_URL || 
-          import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-          import.meta.env.VITE_DEV_MODE === 'true';
-
-        if (isDevelopmentMode) {
+        if (isDevelopmentMode()) {
           // Use mock data in development mode
           const mockEmployees = [
             {
@@ -224,13 +218,7 @@ const EmployeesPage = () => {
   // Handle employee submission (create or update)
   const handleEmployeeSubmit = async (employeeData) => {
     try {
-      // Check if we're in development mode
-      const isDevelopmentMode = 
-        !import.meta.env.VITE_SUPABASE_URL || 
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         console.log('Employee data (Demo mode):', employeeData);
         alert(editingEmployee ? 'Employee updated successfully! (Demo mode)' : 'Employee added successfully! (Demo mode)');
         setEditingEmployee(null);
@@ -251,15 +239,7 @@ const EmployeesPage = () => {
           status: employeeData.status
         };
 
-        // Only add leave_date if the column exists (temporary fix)
-        if (employeeData.leave_date) {
-          updateData.leave_date = employeeData.leave_date;
-        }
-
-        // If total_paid is calculated (when leave_date is set), include it
-        if (employeeData.total_paid !== undefined) {
-          updateData.total_paid = employeeData.total_paid;
-        }
+        updateData.leave_date = employeeData.leave_date || null;
 
         const { error } = await supabase
           .from('employees')
@@ -277,8 +257,7 @@ const EmployeesPage = () => {
           department: employeeData.department,
           monthly_contribution_amount: employeeData.monthly_contribution_amount,
           join_date: employeeData.join_date,
-          status: employeeData.status,
-          total_paid: employeeData.total_paid || 0 // Use calculated value or default to 0
+          status: employeeData.status
         };
 
         // Only add leave_date if provided (temporary fix)
@@ -319,13 +298,7 @@ const EmployeesPage = () => {
     }
 
     try {
-      // Check if we're in development mode
-      const isDevelopmentMode = 
-        !import.meta.env.VITE_SUPABASE_URL || 
-        import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co' ||
-        import.meta.env.VITE_DEV_MODE === 'true';
-
-      if (isDevelopmentMode) {
+      if (isDevelopmentMode()) {
         console.log('Delete employee (Demo mode):', employee);
         alert('Employee deleted successfully! (Demo mode)');
         return;
