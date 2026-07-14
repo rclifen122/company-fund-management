@@ -60,7 +60,7 @@ const HomePage = () => {
           setStats({
             totalCollected: 1000000,
             totalExpenses: 425000,
-            currentBalance: 575000,
+            currentBalance: 825000,
             totalEmployees: 12,
             paidThisMonth: 8,
             overdueCount: 2,
@@ -68,7 +68,7 @@ const HomePage = () => {
             collectionRate: 66.7,
             expenseRate: 42.5,
             monthlyGrowth: 15.2,
-            projectedBalance: 825000
+            projectedBalance: 575000
           });
 
           setMonthlyData([
@@ -210,13 +210,15 @@ const HomePage = () => {
           return sum + Number((e.net_amount ?? e.amount) || 0);
         }, 0);
 
-        const correctedCurrentBalance = correctedTotalCollected - totalSpentNet;
+        const balanceAfterPendingBills = correctedTotalCollected - totalSpentNet;
+        const currentAvailableBalance = balanceAfterPendingBills + pendingDirectReceivables;
 
         console.log('HomePage fund calculation:', {
           totalEmployees: employeesData.length,
           correctedTotalCollected,
           totalSpentNet,
-          correctedCurrentBalance
+          currentAvailableBalance,
+          balanceAfterPendingBills
         });
 
         console.log('Total expenses in database:', expensesData.length);
@@ -291,7 +293,7 @@ const HomePage = () => {
           const newStats = {
             totalCollected: correctedTotalCollected,
             totalExpenses: totalSpentNet,
-            currentBalance: correctedCurrentBalance,
+            currentBalance: currentAvailableBalance,
             totalEmployees: activeEmployees.length, // Only active employees
             paidThisMonth: paidEmployees,
             overdueCount: overdueEmployees,
@@ -306,7 +308,7 @@ const HomePage = () => {
             expenseRate: correctedTotalCollected > 0 ?
               (totalSpentNet / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2,
-            projectedBalance: correctedCurrentBalance + pendingDirectReceivables
+            projectedBalance: balanceAfterPendingBills
           };
           console.log('Setting new stats:', newStats);
           setStats(newStats);
@@ -661,11 +663,13 @@ const HomePage = () => {
           </StaggerItem>
           <StaggerItem>
             <StatCard
-              title="Số Dư Sau Khi Hoàn Tất Bill Chia"
-              value={formatVND(stats.projectedBalance)}
-              subValue={`Số dư hiện tại (chưa tính bill đang chia): ${formatVND(stats.currentBalance)}`}
-              change={stats.projectedBalance >= 0 ? "Dương tính" : "Âm tính"}
-              changeType={stats.projectedBalance >= 0 ? "positive" : "negative"}
+              title="Số Dư Hiện Tại"
+              value={formatVND(stats.currentBalance)}
+              subValue={stats.currentBalance !== stats.projectedBalance
+                ? `Sau khi hoàn tất bill chia: ${formatVND(stats.projectedBalance)}`
+                : null}
+              change={stats.currentBalance >= 0 ? "Dương tính" : "Âm tính"}
+              changeType={stats.currentBalance >= 0 ? "positive" : "negative"}
               icon={Target}
             />
           </StaggerItem>
