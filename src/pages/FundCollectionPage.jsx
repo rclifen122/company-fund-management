@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import PaymentModal from '../components/PaymentModal';
+import EmployeePaymentMatrix from '../components/EmployeePaymentMatrix';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND, formatDate } from '../utils/format';
-import { getPaymentStatusColor, getDepartmentColor } from '../utils/helpers';
-import { Plus, Calendar, TrendingUp, Users, PiggyBank, Search, Filter, Eye, Download, CreditCard, Banknote, Smartphone, CheckCircle, Clock, AlertTriangle, UserCheck } from 'lucide-react';
+import { getDepartmentColor } from '../utils/helpers';
+import { Plus, Calendar, TrendingUp, Users, PiggyBank, Filter, Eye, Download, CreditCard, Banknote, Smartphone, CheckCircle, Clock, AlertTriangle, UserCheck } from 'lucide-react';
 
 const FundCollectionPage = () => {
   const [payments, setPayments] = useState([]);
@@ -14,7 +15,7 @@ const FundCollectionPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState('current');
+  const [statusYear, setStatusYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all'); // all, cash, bank_transfer, e_wallet
   const [dateFilter, setDateFilter] = useState('all'); // all, today, week, month, custom
@@ -291,38 +292,32 @@ const FundCollectionPage = () => {
     0
   );
   const collectionRate = activeEmployees.length > 0 ? (paidEmployees / activeEmployees.length) * 100 : 0;
-  const averagePaymentAmount = payments.length > 0 ? totalCollected / payments.length : 0;
   const totalOutstanding = activeEmployees
     .filter(employee => ['pending', 'overdue'].includes(employee.current_month_status))
     .reduce((sum, employee) => sum + Number(employee.monthly_contribution || 0), 0);
 
-  // Monthly trend calculation (last 6 months)
-  const last6Months = Array.from({ length: 6 }, (_, i) => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - i);
-    return {
-      month: date.toLocaleDateString('vi-VN', { month: 'short', year: 'numeric' }),
-      collected: payments
-        .filter(p => {
-          const paymentDate = new Date(p.payment_date);
-          return paymentDate.getMonth() === date.getMonth() &&
-            paymentDate.getFullYear() === date.getFullYear();
-        })
-        .reduce((sum, p) => sum + p.amount, 0)
-    };
-  }).reverse();
-
-  // Payment method distribution
-  const paymentMethodStats = {
-    cash: payments.filter(p => p.payment_method === 'cash').reduce((sum, p) => sum + p.amount, 0),
-    bank_transfer: payments.filter(p => p.payment_method === 'bank_transfer').reduce((sum, p) => sum + p.amount, 0),
-    e_wallet: payments.filter(p => p.payment_method === 'e_wallet').reduce((sum, p) => sum + p.amount, 0)
-  };
-
-  const filteredEmployees = employees.filter(employee => {
-    return employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      employee.department.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const knownStatusYears = [
+    new Date().getFullYear(),
+    ...payments.flatMap((payment) => {
+      const coveredYears = Array.isArray(payment.months_covered)
+        ? payment.months_covered
+          .map((monthKey) => Number(String(monthKey).slice(0, 4)))
+          .filter(Number.isInteger)
+        : [];
+      const paymentYear = payment.payment_date ? new Date(payment.payment_date).getFullYear() : null;
+      return paymentYear ? [...coveredYears, paymentYear] : coveredYears;
+    }),
+    ...employees.flatMap((employee) => [employee.join_date, employee.leave_date]
+      .filter(Boolean)
+      .map((date) => new Date(date).getFullYear())
+      .filter(Number.isInteger)),
+  ];
+  const firstStatusYear = Math.min(...knownStatusYears);
+  const lastStatusYear = Math.max(...knownStatusYears);
+  const statusYears = Array.from(
+    { length: lastStatusYear - firstStatusYear + 1 },
+    (_, index) => lastStatusYear - index
+  );
 
   // Filter payments based on search and filters - with null safety
   const filteredPayments = payments.filter(payment => {
@@ -361,7 +356,7 @@ const FundCollectionPage = () => {
         } else if (dateFilter === 'month') {
           matchesDate = paymentDate >= oneMonthAgo;
         }
-      } catch (error) {
+      } catch {
         console.warn('Invalid payment date:', payment.payment_date);
         matchesDate = false;
       }
@@ -442,7 +437,7 @@ const FundCollectionPage = () => {
       }
 
       // Insert payment into Supabase
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('fund_payments')
         .insert([{
           employee_id: paymentData.employee_id,
@@ -662,135 +657,15 @@ const FundCollectionPage = () => {
           </div>
         </div>
 
-        {/* Employee Payment Status */}
-        <div className="bg-white shadow rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium text-gray-900">Employee Payment Status</h3>
-              <div className="flex space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search employees..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="block pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
-                <select
-                  value={selectedPeriod}
-                  onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="block pl-3 pr-10 py-2 text-base border border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md"
-                >
-                  <option value="current">Current Month</option>
-                  <option value="last">Last Month</option>
-                  <option value="all">All Time</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Nhân Viên
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Phòng Ban
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Mức Đóng Tháng
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tổng Đã Đóng
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lần Đóng Cuối
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Trạng Thái
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Thao Tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEmployees.map((employee) => (
-                  <tr key={employee.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                          <span className="text-indigo-600 font-medium">
-                            {employee.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                          </span>
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {employee.name}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getDepartmentColor(employee.department)}`}>
-                        {employee.department}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatVND(employee.monthly_contribution)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {formatVND(employee.total_paid)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(employee.last_payment_date)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {employee.current_month_status === 'paid' && <CheckCircle className="h-4 w-4 text-green-500 mr-2" />}
-                        {employee.current_month_status === 'pending' && <Clock className="h-4 w-4 text-yellow-500 mr-2" />}
-                        {employee.current_month_status === 'overdue' && <AlertTriangle className="h-4 w-4 text-red-500 mr-2" />}
-                        {employee.current_month_status === 'completed' && <CheckCircle className="h-4 w-4 text-blue-500 mr-2" />}
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(employee.current_month_status)}`}>
-                          {employee.current_month_status === 'paid' ? 'Đã nộp' :
-                            employee.current_month_status === 'pending' ? 'Chờ nộp' :
-                              employee.current_month_status === 'overdue' ? 'Quá hạn' :
-                                employee.current_month_status === 'completed' ? 'Hoàn thành' : 'Không xác định'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {employee.current_month_status !== 'paid' && employee.current_month_status !== 'completed' && (
-                        <button
-                          onClick={() => setShowPaymentModal(true)}
-                          className="text-indigo-600 hover:text-indigo-900"
-                        >
-                          Record Payment
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-                }
-              </tbody>
-              <tfoot className="bg-gray-100">
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900" colSpan="3">
-                    Total
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
-                    {formatVND(filteredEmployees.reduce((sum, e) => sum + e.total_paid, 0))}
-                  </td>
-                  <td className="px-6 py-4" colSpan="3"></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
+        <EmployeePaymentMatrix
+          employees={employees}
+          payments={payments}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          selectedYear={statusYear}
+          onYearChange={setStatusYear}
+          availableYears={statusYears}
+        />
 
         {/* Payment History with Advanced Filtering */}
         <div className="bg-white shadow rounded-lg">

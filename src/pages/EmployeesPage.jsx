@@ -2,11 +2,18 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import PageTransition from '../components/PageTransition';
 import EmployeeModal from '../components/EmployeeModal';
+import EmployeeMembershipModal from '../components/EmployeeMembershipModal';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND, formatDate } from '../utils/format';
 import { getStatusColor, getPaymentStatusColor, getDepartmentColor } from '../utils/helpers';
-import { Search, Plus, Edit, Trash2, Users, Phone, Mail, DollarSign } from 'lucide-react';
+import {
+  EMPLOYEE_MEMBERSHIP,
+  getEmployeeMembershipMode,
+  getMembershipUpdate,
+  isActiveFundMember,
+} from '../utils/employeeMembership';
+import { Search, Plus, Edit, Settings2, Users, Phone, Mail, DollarSign } from 'lucide-react';
 
 const EmployeesPage = () => {
   const [employees, setEmployees] = useState([]);
@@ -16,6 +23,8 @@ const EmployeesPage = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showEditForm, setShowEditForm] = useState(false);
+  const [membershipEmployee, setMembershipEmployee] = useState(null);
+  const [savingMembership, setSavingMembership] = useState(false);
 
   // Fetch real data from Supabase (reusable)
   const fetchEmployeesData = async () => {
@@ -36,6 +45,7 @@ const EmployeesPage = () => {
               join_date: '2024-01-01',
               leave_date: null,
               status: 'active',
+              participates_in_fund: true,
               months_paid: 3,
               current_month_status: 'paid'
             },
@@ -50,8 +60,9 @@ const EmployeesPage = () => {
               join_date: '2024-01-15',
               leave_date: null,
               status: 'active',
+              participates_in_fund: false,
               months_paid: 2,
-              current_month_status: 'pending'
+              current_month_status: 'direct'
             },
             {
               id: 3,
@@ -64,6 +75,7 @@ const EmployeesPage = () => {
               join_date: '2024-02-01',
               leave_date: '2024-05-01',
               status: 'inactive',
+              participates_in_fund: false,
               months_paid: 3,
               current_month_status: 'inactive'
             }
@@ -93,7 +105,7 @@ const EmployeesPage = () => {
         // Get payments for calculating current month status
         const paymentsResponse = await supabase
           .from('fund_payments')
-          .select('employee_id, payment_date, amount');
+          .select('employee_id, payment_date, amount, months_covered');
 
         console.log('Payments response:', paymentsResponse);
         
@@ -101,35 +113,40 @@ const EmployeesPage = () => {
         const paymentsData = paymentsResponse.data || [];
 
         // Process employees data to add payment status
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
+        const now = new Date();
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
         const processedEmployees = employeesData?.map(employee => {
           // Find payments for this employee
           const employeePayments = paymentsData?.filter(p => p.employee_id === employee.id) || [];
           
-          // Count total months paid
-          const monthsPaid = Math.round(Number(employee.total_paid) / Number(employee.monthly_contribution_amount));
-          
-          // Check current month payment status
-          const currentMonthPayments = employeePayments.filter(payment => {
-            const paymentDate = new Date(payment.payment_date);
-            return paymentDate.getMonth() === currentMonth && 
-                   paymentDate.getFullYear() === currentYear;
-          });
+          const coveredMonths = new Set(employeePayments.flatMap(payment => {
+            if (Array.isArray(payment.months_covered) && payment.months_covered.length > 0) {
+              return payment.months_covered;
+            }
+
+            return payment.payment_date ? [String(payment.payment_date).slice(0, 7)] : [];
+          }));
+          const fallbackMonthsPaid = Number(employee.monthly_contribution_amount) > 0
+            ? Math.round(Number(employee.total_paid) / Number(employee.monthly_contribution_amount))
+            : 0;
+          const monthsPaid = coveredMonths.size || fallbackMonthsPaid;
 
           // Find latest payment
           const latestPayment = employeePayments
+            .slice()
             .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
 
           // Determine current month status
           let status = 'pending';
-          if (employee.status === 'inactive') {
+          const membershipMode = getEmployeeMembershipMode(employee);
+          if (membershipMode === EMPLOYEE_MEMBERSHIP.INACTIVE) {
             status = 'inactive';
-          } else if (currentMonthPayments.length > 0) {
+          } else if (membershipMode === EMPLOYEE_MEMBERSHIP.DIRECT) {
+            status = 'direct';
+          } else if (coveredMonths.has(currentMonthKey)) {
             status = 'paid';
           } else if (latestPayment) {
-            const now = new Date();
             const lastPaymentDate = new Date(latestPayment.payment_date);
             const daysSinceLastPayment = Math.floor(
               (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
@@ -176,6 +193,7 @@ const EmployeesPage = () => {
             join_date: '2024-01-01',
             leave_date: null,
             status: 'active',
+            participates_in_fund: true,
             months_paid: 3,
             current_month_status: 'paid'
           }
@@ -218,9 +236,43 @@ const EmployeesPage = () => {
   // Handle employee submission (create or update)
   const handleEmployeeSubmit = async (employeeData) => {
     try {
+      const isInactive = employeeData.status === 'inactive' || Boolean(employeeData.leave_date);
+      const normalizedData = {
+        name: employeeData.name.trim(),
+        email: employeeData.email.trim(),
+        phone: employeeData.phone.trim(),
+        department: employeeData.department,
+        monthly_contribution_amount: Number(employeeData.monthly_contribution_amount),
+        join_date: employeeData.join_date,
+        leave_date: employeeData.leave_date || null,
+        status: isInactive ? 'inactive' : 'active',
+        participates_in_fund: isInactive ? false : employeeData.participates_in_fund !== false,
+      };
+
       if (isDevelopmentMode()) {
-        console.log('Employee data (Demo mode):', employeeData);
-        alert(editingEmployee ? 'Employee updated successfully! (Demo mode)' : 'Employee added successfully! (Demo mode)');
+        console.log('Employee data (Demo mode):', normalizedData);
+        if (editingEmployee) {
+          setEmployees(current => current.map(employee => (
+            employee.id === editingEmployee.id
+              ? {
+                ...employee,
+                ...normalizedData,
+                current_month_status: normalizedData.status === 'inactive'
+                  ? 'inactive'
+                  : normalizedData.participates_in_fund ? employee.current_month_status : 'direct',
+              }
+              : employee
+          )));
+        } else {
+          setEmployees(current => [{
+            id: `demo-${Date.now()}`,
+            ...normalizedData,
+            total_paid: 0,
+            months_paid: 0,
+            current_month_status: normalizedData.participates_in_fund ? 'pending' : 'direct',
+          }, ...current]);
+        }
+        alert(editingEmployee ? 'Đã cập nhật nhân viên (Demo mode).' : 'Đã thêm nhân viên (Demo mode).');
         setEditingEmployee(null);
         setShowEditForm(false);
         setShowCreateForm(false);
@@ -228,49 +280,20 @@ const EmployeesPage = () => {
       }
 
       if (editingEmployee) {
-        // Update existing employee
-        const updateData = {
-          name: employeeData.name,
-          email: employeeData.email,
-          phone: employeeData.phone,
-          department: employeeData.department,
-          monthly_contribution_amount: employeeData.monthly_contribution_amount,
-          join_date: employeeData.join_date,
-          status: employeeData.status
-        };
-
-        updateData.leave_date = employeeData.leave_date || null;
-
         const { error } = await supabase
           .from('employees')
-          .update(updateData)
+          .update(normalizedData)
           .eq('id', editingEmployee.id);
 
         if (error) throw error;
-        alert('Employee updated successfully!');
+        alert('Đã cập nhật nhân viên.');
       } else {
-        // Insert new employee
-        const insertData = {
-          name: employeeData.name,
-          email: employeeData.email,
-          phone: employeeData.phone,
-          department: employeeData.department,
-          monthly_contribution_amount: employeeData.monthly_contribution_amount,
-          join_date: employeeData.join_date,
-          status: employeeData.status
-        };
-
-        // Only add leave_date if provided (temporary fix)
-        if (employeeData.leave_date) {
-          insertData.leave_date = employeeData.leave_date;
-        }
-
         const { error } = await supabase
           .from('employees')
-          .insert([insertData]);
+          .insert([normalizedData]);
 
         if (error) throw error;
-        alert('Employee added successfully!');
+        alert('Đã thêm nhân viên.');
       }
 
       // Reset form state and refresh data without full reload
@@ -281,7 +304,8 @@ const EmployeesPage = () => {
       
     } catch (error) {
       console.error('Error saving employee:', error);
-      alert('Error saving employee: ' + error.message);
+      alert('Không thể lưu nhân viên: ' + error.message);
+      throw error;
     }
   };
 
@@ -291,51 +315,66 @@ const EmployeesPage = () => {
     setShowEditForm(true);
   };
 
-  // Handle delete employee
-  const handleDeleteEmployee = async (employee) => {
-    if (!confirm(`Are you sure you want to delete ${employee.name}?`)) {
-      return;
-    }
+  const handleMembershipChange = async (mode) => {
+    if (!membershipEmployee) return;
 
+    setSavingMembership(true);
     try {
+      const updateData = getMembershipUpdate(mode);
+
       if (isDevelopmentMode()) {
-        console.log('Delete employee (Demo mode):', employee);
-        alert('Employee deleted successfully! (Demo mode)');
+        setEmployees(current => current.map(employee => (
+          employee.id === membershipEmployee.id
+            ? {
+              ...employee,
+              ...updateData,
+              current_month_status: mode === EMPLOYEE_MEMBERSHIP.FUND
+                ? 'pending'
+                : mode === EMPLOYEE_MEMBERSHIP.DIRECT ? 'direct' : 'inactive',
+            }
+            : employee
+        )));
+        setMembershipEmployee(null);
         return;
       }
 
-      // Delete employee from Supabase
       const { error } = await supabase
         .from('employees')
-        .delete()
-        .eq('id', employee.id);
+        .update(updateData)
+        .eq('id', membershipEmployee.id);
 
       if (error) throw error;
 
-      alert('Employee deleted successfully!');
-      // Refresh data without full reload
       await fetchEmployeesData();
-      
+      setMembershipEmployee(null);
     } catch (error) {
-      console.error('Error deleting employee:', error);
-      alert('Error deleting employee: ' + error.message);
+      console.error('Error updating employee membership:', error);
+      alert('Không thể cập nhật hình thức tham gia: ' + error.message);
+    } finally {
+      setSavingMembership(false);
     }
   };
 
 
 
   const filteredEmployees = employees.filter(employee => {
-    const matchesSearch = employee.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         employee.department.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || employee.status === filterStatus;
+    const normalizedSearch = searchTerm.trim().toLocaleLowerCase('vi-VN');
+    const matchesSearch = [employee.name, employee.email, employee.department]
+      .some(value => String(value || '').toLocaleLowerCase('vi-VN').includes(normalizedSearch));
+    const matchesStatus = filterStatus === 'all'
+      || getEmployeeMembershipMode(employee) === filterStatus;
     return matchesSearch && matchesStatus;
   });
 
-  const totalEmployees = employees.filter(e => e.status === 'active').length;
-  const totalCollected = employees.filter(e => e.participates_in_fund).reduce((sum, e) => sum + e.total_paid, 0);
-  const paidThisMonth = employees.filter(e => e.current_month_status === 'paid').length;
-  const overdueCount = employees.filter(e => e.current_month_status === 'overdue').length;
+  const activeEmployees = employees.filter(employee => (
+    getEmployeeMembershipMode(employee) !== EMPLOYEE_MEMBERSHIP.INACTIVE
+  ));
+  const activeFundEmployees = employees.filter(isActiveFundMember);
+  const totalEmployees = activeEmployees.length;
+  const totalCollected = employees
+    .reduce((sum, employee) => sum + Number(employee.total_paid || 0), 0);
+  const paidThisMonth = activeFundEmployees.filter(employee => employee.current_month_status === 'paid').length;
+  const overdueCount = activeFundEmployees.filter(employee => employee.current_month_status === 'overdue').length;
 
   if (loading) {
     return (
@@ -437,8 +476,9 @@ const EmployeesPage = () => {
               className="block pl-3 pr-10 py-2 text-base border border-gray-200 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 rounded-xl bg-white dark:bg-gray-700/50 text-gray-900 dark:text-white transition-all duration-200"
             >
               <option value="all">Tất cả</option>
-              <option value="active">Đang làm</option>
-              <option value="inactive">Đã nghỉ</option>
+              <option value="fund">Tham gia Quỹ</option>
+              <option value="direct">Direct</option>
+              <option value="inactive">Ngừng tham gia</option>
             </select>
           </div>
         </div>
@@ -454,6 +494,9 @@ const EmployeesPage = () => {
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Phòng Ban
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Hình Thức
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Mức Đóng Tháng
@@ -505,11 +548,28 @@ const EmployeesPage = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getDepartmentColor(employee.department)}`}>
-                        {employee.department}
+                        {employee.department || 'Chưa có'}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.FUND ? (
+                        <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                          Quỹ
+                        </span>
+                      ) : getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.DIRECT ? (
+                        <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+                          Direct
+                        </span>
+                      ) : (
+                        <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                          Ngừng tham gia
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatVND(employee.monthly_contribution_amount)}
+                      {getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.FUND
+                        ? formatVND(employee.monthly_contribution_amount)
+                        : <span className="text-gray-400">Không thu hàng tháng</span>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {formatVND(employee.total_paid)}
@@ -529,12 +589,13 @@ const EmployeesPage = () => {
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPaymentStatusColor(employee.current_month_status)}`}>
                         {employee.current_month_status === 'paid' ? 'Đã nộp' :
                          employee.current_month_status === 'pending' ? 'Chờ nộp' :
-                         employee.current_month_status === 'overdue' ? 'Quá hạn' : 'Không hoạt động'}
+                         employee.current_month_status === 'overdue' ? 'Quá hạn' :
+                         employee.current_month_status === 'direct' ? 'Theo từng chi phí' : 'Không hoạt động'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(employee.status)}`}>
-                        {employee.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.INACTIVE ? 'inactive' : 'active')}`}>
+                        {getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.INACTIVE ? 'Không hoạt động' : 'Hoạt động'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -542,16 +603,16 @@ const EmployeesPage = () => {
                         <button 
                           onClick={() => handleEditEmployee(employee)}
                           className="text-indigo-600 hover:text-indigo-900 p-1 rounded transition-colors"
-                          title="Edit Employee"
+                          title="Chỉnh sửa thông tin"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button 
-                          onClick={() => handleDeleteEmployee(employee)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded transition-colors"
-                          title="Delete Employee"
+                          onClick={() => setMembershipEmployee(employee)}
+                          className="text-slate-600 hover:text-indigo-700 p-1 rounded transition-colors"
+                          title="Quản lý hình thức tham gia"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Settings2 className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -589,6 +650,16 @@ const EmployeesPage = () => {
           onSubmit={handleEmployeeSubmit}
           employee={editingEmployee}
           isEditing={true}
+        />
+
+        <EmployeeMembershipModal
+          employee={membershipEmployee}
+          isOpen={Boolean(membershipEmployee)}
+          isSaving={savingMembership}
+          onClose={() => {
+            if (!savingMembership) setMembershipEmployee(null);
+          }}
+          onSave={handleMembershipChange}
         />
       </PageTransition>
     </Layout>

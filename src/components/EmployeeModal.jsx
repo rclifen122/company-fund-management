@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, User, Mail, Phone, Building, DollarSign, Calendar } from 'lucide-react';
+import { X, User, Mail, Phone, Building, DollarSign, Calendar, PiggyBank, Receipt } from 'lucide-react';
 
 const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false }) => {
   const [formData, setFormData] = useState({
@@ -10,7 +10,8 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
     monthly_contribution_amount: 100000,
     join_date: new Date().toISOString().split('T')[0],
     leave_date: '',
-    status: 'active'
+    status: 'active',
+    participates_in_fund: true
   });
 
   // Update form data when employee prop changes (for editing)
@@ -24,7 +25,8 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
         monthly_contribution_amount: employee.monthly_contribution_amount || 100000,
         join_date: employee.join_date ? employee.join_date.split('T')[0] : new Date().toISOString().split('T')[0],
         leave_date: employee.leave_date ? employee.leave_date.split('T')[0] : '',
-        status: employee.status || 'active'
+        status: employee.status || 'active',
+        participates_in_fund: employee.participates_in_fund !== false
       });
     } else if (!isEditing) {
       // Reset form for new employee
@@ -36,7 +38,8 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
         monthly_contribution_amount: 100000,
         join_date: new Date().toISOString().split('T')[0],
         leave_date: '',
-        status: 'active'
+        status: 'active',
+        participates_in_fund: true
       });
     }
   }, [isEditing, employee]);
@@ -133,6 +136,9 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
       // Leaving the company changes membership status, not payment history.
       if (formData.leave_date) {
         submissionData.status = 'inactive';
+        submissionData.participates_in_fund = false;
+      } else if (formData.status === 'inactive') {
+        submissionData.participates_in_fund = false;
       }
       
       await onSubmit(submissionData);
@@ -146,13 +152,18 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
           monthly_contribution_amount: 100000,
           join_date: new Date().toISOString().split('T')[0],
           leave_date: '',
-          status: 'active'
+          status: 'active',
+          participates_in_fund: true
         });
       }
       setErrors({});
       onClose();
     } catch (error) {
       console.error('Error submitting employee:', error);
+      setErrors(prev => ({
+        ...prev,
+        submit: error?.message || 'Không thể lưu nhân viên. Vui lòng thử lại.',
+      }));
     } finally {
       setIsSubmitting(false);
     }
@@ -160,10 +171,21 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => {
+      if (name === 'status') {
+        return {
+          ...prev,
+          status: value,
+          leave_date: value === 'active' ? '' : prev.leave_date,
+          participates_in_fund: value === 'inactive' ? false : prev.participates_in_fund,
+        };
+      }
+
+      return {
+        ...prev,
+        [name]: value
+      };
+    });
     // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
@@ -279,11 +301,58 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                 {errors.department && <p className="mt-1 text-xs text-red-600">{errors.department}</p>}
               </div>
 
+              {/* Participation mode */}
+              <fieldset>
+                <legend className="block text-sm font-medium text-gray-700 mb-2">
+                  Hình Thức Tham Gia *
+                </legend>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({
+                      ...prev,
+                      status: 'active',
+                      leave_date: '',
+                      participates_in_fund: true,
+                    }))}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      formData.participates_in_fund && formData.status === 'active'
+                        ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20'
+                        : 'border-gray-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                      <PiggyBank className="h-4 w-4" /> Tham gia Quỹ
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-500">Đóng quỹ hàng tháng.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({
+                      ...prev,
+                      status: 'active',
+                      leave_date: '',
+                      participates_in_fund: false,
+                    }))}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      !formData.participates_in_fund && formData.status === 'active'
+                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-500/20'
+                        : 'border-gray-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 text-sm font-semibold text-blue-800">
+                      <Receipt className="h-4 w-4" /> Direct
+                    </span>
+                    <span className="mt-1 block text-xs text-gray-500">Đóng theo từng chi phí được chia.</span>
+                  </button>
+                </div>
+              </fieldset>
+
               {/* Monthly Contribution */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   <DollarSign className="inline h-4 w-4 mr-1" />
-                  Số Tiền Đóng Góp Hàng Tháng (VND) *
+                  Mức Quỹ Hàng Tháng (VND) *
                 </label>
                 <input
                   type="number"
@@ -298,6 +367,11 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                   placeholder="100000"
                 />
                 {errors.monthly_contribution_amount && <p className="mt-1 text-xs text-red-600">{errors.monthly_contribution_amount}</p>}
+                {!formData.participates_in_fund && formData.status === 'active' && (
+                  <p className="mt-1 text-xs text-blue-600">
+                    Direct hiện không bị thu hàng tháng; mức này chỉ dùng nếu chuyển lại sang Quỹ.
+                  </p>
+                )}
               </div>
 
               {/* Join Date */}
@@ -373,9 +447,13 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                   className="block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="active">Hoạt động</option>
-                  <option value="inactive">Không hoạt động</option>
+                  <option value="inactive">Ngừng tham gia</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Ngừng tham gia không xoá lịch sử thu quỹ hoặc chia chi phí.
+                </p>
               </div>
+              {errors.submit && <p className="text-sm text-red-600">{errors.submit}</p>}
             </form>
           </div>
 
