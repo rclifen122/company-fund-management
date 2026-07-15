@@ -7,6 +7,8 @@ import { formatVND, formatDate } from '../utils/format';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { useFeedback } from '../contexts/feedback';
 import { ErrorState, PageSkeleton } from '../components/PageState';
+import { isDevelopmentMode } from '../utils/env';
+import { DEMO_EXPENSES } from '../utils/demoData';
 
 const ExpensesPage = () => {
   const { showToast, confirmAction } = useFeedback();
@@ -17,7 +19,12 @@ const ExpensesPage = () => {
   const [error, setError] = useState(null);
 
   const fetchExpensesData = async () => {
+    setError(null);
     try {
+      if (isDevelopmentMode()) {
+        setExpenses(DEMO_EXPENSES.map((expense) => ({ ...expense })));
+        return;
+      }
       const { data, error } = await supabase
         .from('expenses')
         .select('*')
@@ -42,6 +49,8 @@ const ExpensesPage = () => {
   useEffect(() => {
     setLoading(true);
     Promise.all([fetchExpensesData()]).finally(() => setLoading(false));
+
+    if (isDevelopmentMode()) return undefined;
 
     const channel = supabase.channel('expenses-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
@@ -92,7 +101,13 @@ const ExpensesPage = () => {
       }
 
       let error;
-      if (isEditing) {
+      if (isDevelopmentMode()) {
+        setExpenses((current) => isEditing
+          ? current.map((expense) => expense.id === editingExpense.id
+            ? { ...expense, ...payload, net_amount: Number(payload.amount) - Number(expense.amount_reimbursed || 0) }
+            : expense)
+          : [{ id: `demo-expense-${Date.now()}`, ...payload, amount_reimbursed: 0, net_amount: Number(payload.amount), sharing_status: 'not_shared' }, ...current]);
+      } else if (isEditing) {
         // Update existing expense
         ({ error } = await supabase.from('expenses').update(payload).eq('id', editingExpense.id));
       } else {
@@ -121,6 +136,11 @@ const ExpensesPage = () => {
       confirmLabel: 'Xoá chi phí',
     });
     if (!accepted) return;
+    if (isDevelopmentMode()) {
+      setExpenses((current) => current.filter((item) => item.id !== expense.id));
+      showToast('Đã xoá chi phí.');
+      return;
+    }
     const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
     if (error) showToast(`Không thể xoá chi phí: ${error.message}`, 'error');
     else showToast('Đã xoá chi phí.');
@@ -152,6 +172,7 @@ const ExpensesPage = () => {
 
         <div className="bg-white dark:bg-gray-800/80 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card overflow-hidden">
           <div className="space-y-3 p-4 md:hidden">
+            {expenses.length === 0 && <p className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">Chưa có chi phí nào. Hãy nhập khoản chi đầu tiên.</p>}
             {expenses.map((expense) => (
               <article key={expense.id} className="rounded-xl border border-gray-200 p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -186,6 +207,7 @@ const ExpensesPage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800/80 divide-y divide-gray-100 dark:divide-gray-700/50">
+                {expenses.length === 0 && <tr><td colSpan="7" className="px-6 py-12 text-center text-sm text-gray-500">Chưa có chi phí nào. Hãy nhập khoản chi đầu tiên.</td></tr>}
                 {expenses.map((expense) => (
                   <tr key={expense.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors duration-150">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatDate(expense.expense_date)}</td>

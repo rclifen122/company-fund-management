@@ -111,6 +111,7 @@ const HomePage = () => {
             },
           ]);
 
+          setLoading(false);
           return;
         }
 
@@ -534,7 +535,7 @@ const HomePage = () => {
         </div>
 
         {/* Enhanced Stats */}
-        <StaggerContainer className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <StaggerContainer className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
           <StaggerItem>
             <StatCard
               title="Tổng Thu Quỹ"
@@ -581,7 +582,7 @@ const HomePage = () => {
         </StaggerContainer>
 
         {/* Enhanced Payment Status Overview */}
-        <div className="bg-white dark:bg-gray-800/80 p-6 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card">
+        <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-card dark:border-gray-700/50 dark:bg-gray-800/80 sm:p-6">
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Tình Trạng Đóng Quỹ Tháng Này</h3>
             <div className="flex items-center gap-3 text-sm text-gray-500">
@@ -591,31 +592,31 @@ const HomePage = () => {
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">
+          <div className="mb-4 grid grid-cols-2 gap-5 md:grid-cols-4 md:gap-6">
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-3">
-                <span className="text-2xl font-bold text-green-600">{stats.paidThisMonth || 0}</span>
+              <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-green-100 sm:mb-3 sm:h-16 sm:w-16">
+                <span className="text-xl font-bold text-green-600 sm:text-2xl">{stats.paidThisMonth || 0}</span>
               </div>
               <p className="text-sm font-medium text-gray-900">Đã Nộp</p>
               <p className="text-xs text-gray-500">Hoàn thành đúng hạn</p>
             </div>
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-yellow-100 rounded-full mb-3">
-                <span className="text-2xl font-bold text-yellow-600">{stats.pendingCount || 0}</span>
+              <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100 sm:mb-3 sm:h-16 sm:w-16">
+                <span className="text-xl font-bold text-yellow-600 sm:text-2xl">{stats.pendingCount || 0}</span>
               </div>
               <p className="text-sm font-medium text-gray-900">Chờ Nộp</p>
               <p className="text-xs text-gray-500">Trong thời hạn</p>
             </div>
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-3">
-                <span className="text-2xl font-bold text-red-600">{stats.overdueCount || 0}</span>
+              <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-red-100 sm:mb-3 sm:h-16 sm:w-16">
+                <span className="text-xl font-bold text-red-600 sm:text-2xl">{stats.overdueCount || 0}</span>
               </div>
               <p className="text-sm font-medium text-gray-900">Quá Hạn</p>
               <p className="text-xs text-gray-500">Cần nhắc nhở</p>
             </div>
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-3">
-                <span className="text-2xl font-bold text-blue-600">{stats.completedCount || 0}</span>
+              <div className="mb-2 inline-flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 sm:mb-3 sm:h-16 sm:w-16">
+                <span className="text-xl font-bold text-blue-600 sm:text-2xl">{stats.completedCount || 0}</span>
               </div>
               <p className="text-sm font-medium text-gray-900">Hoàn Thành</p>
               <p className="text-xs text-gray-500">Đã nghỉ việc</p>
@@ -684,6 +685,7 @@ const HomePage = () => {
                     outerRadius={100}
                     paddingAngle={5}
                     dataKey="value"
+                    isAnimationActive={false}
                   >
                     {expensesByCategory.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />

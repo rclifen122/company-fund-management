@@ -174,8 +174,8 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="fixed inset-0 z-50">
+      <div className="flex h-full items-center justify-center p-3 sm:p-4">
         <button
           type="button"
           className="fixed inset-0 bg-black/50 transition-opacity"
@@ -183,15 +183,16 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
           aria-label="Đóng cửa sổ"
         />
 
-        <div className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-white shadow-xl">
-          <div className="flex items-center justify-between border-b border-gray-200 p-6">
+        <div className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl sm:max-h-[90vh]">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-medium text-gray-900">Ghi Nhận Thu Quỹ</h3>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting} aria-label="Đóng">
               <X className="h-6 w-6" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 p-6">
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
             <div>
               <label className="mb-2 flex items-center text-sm font-medium text-gray-700" htmlFor="payment-employee">
                 <User className="mr-2 h-4 w-4" /> Nhân viên
@@ -370,9 +371,10 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
               />
             </div>
 
-            {errors.submit && <div className="rounded-md border border-red-200 bg-red-50 p-3"><p className="text-sm text-red-600">{errors.submit}</p></div>}
+              {errors.submit && <div className="rounded-md border border-red-200 bg-red-50 p-3"><p className="text-sm text-red-600">{errors.submit}</p></div>}
+            </div>
 
-            <div className="flex space-x-3 pt-4">
+            <div className="flex shrink-0 space-x-3 border-t border-gray-200 bg-white p-4 shadow-[0_-8px_20px_-16px_rgba(15,23,42,0.45)] sm:px-6">
               <button type="button" onClick={onClose} className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" disabled={isSubmitting}>Hủy</button>
               <button type="submit" className="flex-1 rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50" disabled={isSubmitting}>
                 {isSubmitting ? 'Đang lưu...' : 'Lưu giao dịch'}

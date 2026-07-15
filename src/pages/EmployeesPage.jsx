@@ -284,7 +284,7 @@ const EmployeesPage = () => {
               <table className="w-full">
                 <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500 dark:bg-gray-700/40">
                   <tr>
-                    <th className="w-12 px-4 py-3"><input type="checkbox" aria-label="Chọn tất cả" checked={filteredEmployees.length > 0 && filteredEmployees.every((employee) => selectedIds.has(employee.id))} onChange={(event) => setSelectedIds(event.target.checked ? new Set(filteredEmployees.map((employee) => employee.id)) : new Set())} /></th>
+                    <th className="w-14 px-2 py-1"><label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg hover:bg-gray-100"><input type="checkbox" className="h-5 w-5 rounded border-gray-300 text-indigo-600" aria-label="Chọn tất cả" checked={filteredEmployees.length > 0 && filteredEmployees.every((employee) => selectedIds.has(employee.id))} onChange={(event) => setSelectedIds(event.target.checked ? new Set(filteredEmployees.map((employee) => employee.id)) : new Set())} /></label></th>
                     <th className="px-4 py-3">Tên nhân viên</th>
                     <th className="px-4 py-3">Tình trạng</th>
                     <th className="w-36 px-4 py-3 text-right">Điều chỉnh</th>
@@ -293,7 +293,7 @@ const EmployeesPage = () => {
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {filteredEmployees.map((employee) => (
                     <tr key={employee.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <td className="px-4 py-4"><input type="checkbox" aria-label={`Chọn ${employee.name}`} checked={selectedIds.has(employee.id)} onChange={() => toggleSelection(employee.id)} /></td>
+                      <td className="px-2 py-2"><label className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg hover:bg-gray-100"><input type="checkbox" className="h-5 w-5 rounded border-gray-300 text-indigo-600" aria-label={`Chọn ${employee.name}`} checked={selectedIds.has(employee.id)} onChange={() => toggleSelection(employee.id)} /></label></td>
                       <td className="px-4 py-4 font-medium text-gray-900 dark:text-white">{employee.name}</td>
                       <td className="px-4 py-4">{renderStatus(employee)}</td>
                       <td className="px-4 py-4 text-right">
@@ -311,7 +311,7 @@ const EmployeesPage = () => {
               {filteredEmployees.map((employee) => (
                 <div key={employee.id} className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
                   <div className="flex items-start gap-3">
-                    <input type="checkbox" className="mt-1" aria-label={`Chọn ${employee.name}`} checked={selectedIds.has(employee.id)} onChange={() => toggleSelection(employee.id)} />
+                    <label className="-ml-2 -mt-2 flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg active:bg-gray-100"><input type="checkbox" className="h-5 w-5 rounded border-gray-300 text-indigo-600" aria-label={`Chọn ${employee.name}`} checked={selectedIds.has(employee.id)} onChange={() => toggleSelection(employee.id)} /></label>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-semibold text-gray-900 dark:text-white">{employee.name}</p>
                       <div className="mt-2">{renderStatus(employee)}</div>

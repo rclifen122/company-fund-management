@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import { supabase } from '../supabase';
 import { formatVND } from '../utils/format';
-import { Users, DollarSign, Cake, Check, X, BadgeCheck, Eye, Clipboard } from 'lucide-react';
+import { Users, DollarSign, Cake, Check, X, BadgeCheck, Eye, Clipboard, ChevronDown, ChevronUp } from 'lucide-react';
 import { useFeedback } from '../contexts/feedback';
 import { ErrorState, PageSkeleton } from '../components/PageState';
+import { isDevelopmentMode } from '../utils/env';
+import { DEMO_BILL_SHARINGS, DEMO_EMPLOYEES, DEMO_EXPENSES } from '../utils/demoData';
 
 const BillSharingPage = () => {
   const { showToast, confirmAction } = useFeedback();
@@ -24,6 +26,7 @@ const BillSharingPage = () => {
   const [directPayment, setDirectPayment] = useState(0);
   const [paymentBreakdown, setPaymentBreakdown] = useState([]);
   const [expandedSharings, setExpandedSharings] = useState(new Set());
+  const [expandedParticipantSharings, setExpandedParticipantSharings] = useState(new Set());
   const [detailsSharing, setDetailsSharing] = useState(null);
   const [copyingId, setCopyingId] = useState(null);
   const [updatingParticipantId, setUpdatingParticipantId] = useState(null);
@@ -31,6 +34,14 @@ const BillSharingPage = () => {
   const [birthdayTypeFilter, setBirthdayTypeFilter] = useState('all'); // all | fund | direct
 
   const fetchSharingHistory = async () => {
+    if (isDevelopmentMode()) {
+      setSharingHistory(DEMO_BILL_SHARINGS.map((sharing) => ({
+        ...sharing,
+        bill_sharing_expenses: sharing.bill_sharing_expenses.map((item) => ({ ...item, expenses: { ...item.expenses } })),
+        bill_sharing_participants: sharing.bill_sharing_participants.map((item) => ({ ...item, employees: { ...item.employees } })),
+      })));
+      return;
+    }
     const { data, error } = await supabase
       .from('bill_sharing')
       .select(`*,
@@ -44,6 +55,10 @@ const BillSharingPage = () => {
   };
 
   const fetchAvailableExpenses = async () => {
+    if (isDevelopmentMode()) {
+      setExpenses(DEMO_EXPENSES.filter((expense) => expense.sharing_status === 'not_shared').map((expense) => ({ ...expense })));
+      return;
+    }
     const { data, error } = await supabase
       .from('expenses')
       .select('*')
@@ -59,13 +74,19 @@ const BillSharingPage = () => {
       setInitialLoading(true);
       setLoadError(null);
       try {
-        const [_, employeesResponse] = await Promise.all([
-          fetchAvailableExpenses(),
-          supabase.from('employees').select('*').order('name', { ascending: true }),
-          fetchSharingHistory(),
-        ]);
-        if (employeesResponse.error) throw employeesResponse.error;
-        const employeesData = employeesResponse.data;
+        let employeesData;
+        if (isDevelopmentMode()) {
+          await Promise.all([fetchAvailableExpenses(), fetchSharingHistory()]);
+          employeesData = DEMO_EMPLOYEES;
+        } else {
+          const [_, employeesResponse] = await Promise.all([
+            fetchAvailableExpenses(),
+            supabase.from('employees').select('*').order('name', { ascending: true }),
+            fetchSharingHistory(),
+          ]);
+          if (employeesResponse.error) throw employeesResponse.error;
+          employeesData = employeesResponse.data;
+        }
         const normalizedEmployees = (employeesData || []).map(emp => ({
           ...emp,
           participates_in_fund: emp.participates_in_fund === true
@@ -141,6 +162,30 @@ const BillSharingPage = () => {
 
     setLoading(true);
     try {
+      if (isDevelopmentMode()) {
+        const expenseRows = expenses.filter((expense) => selectedExpenses.has(expense.id));
+        const participantRows = paymentBreakdown.map((participant, index) => ({
+          id: `demo-participant-${Date.now()}-${index}`,
+          employee_id: participant.id,
+          amount_owed: participant.amountOwed,
+          payment_method: participant.paymentMethod,
+          payment_status: participant.paymentMethod === 'fund' ? 'paid' : 'pending',
+          employees: { name: participant.name, department: participant.department },
+        }));
+        setSharingHistory((current) => [{
+          id: `demo-sharing-${Date.now()}`,
+          total_amount: totalAmount,
+          sharing_date: new Date().toISOString().slice(0, 10),
+          created_at: new Date().toISOString(),
+          status: 'pending',
+          bill_sharing_expenses: expenseRows.map((expense, index) => ({ id: `demo-link-${Date.now()}-${index}`, expenses: { ...expense } })),
+          bill_sharing_participants: participantRows,
+        }, ...current]);
+        setExpenses((current) => current.filter((expense) => !selectedExpenses.has(expense.id)));
+        showToast('Đã tạo lần chia tiền.');
+        setSelectedExpenses(new Set());
+        return;
+      }
       const { error } = await supabase.rpc('create_bill_sharing', {
         expense_ids_input: Array.from(selectedExpenses),
         employee_ids_input: Array.from(selectedEmployees),
@@ -165,6 +210,16 @@ const BillSharingPage = () => {
     const newStatus = currentStatus === 'paid' ? 'pending' : 'paid';
     setUpdatingParticipantId(participantId);
     try {
+      if (isDevelopmentMode()) {
+        setSharingHistory((current) => current.map((sharing) => ({
+          ...sharing,
+          bill_sharing_participants: sharing.bill_sharing_participants.map((participant) => (
+            participant.id === participantId ? { ...participant, payment_status: newStatus } : participant
+          )),
+        })));
+        showToast(newStatus === 'paid' ? 'Đã đánh dấu đã thanh toán.' : 'Đã chuyển về chờ thanh toán.');
+        return;
+      }
       const { error } = await supabase.rpc('set_bill_sharing_payment_status', {
         participant_id_input: participantId,
         payment_status_input: newStatus,
@@ -191,6 +246,11 @@ const BillSharingPage = () => {
     if (!accepted) return;
     setLoading(true);
     try {
+      if (isDevelopmentMode()) {
+        setSharingHistory((current) => current.filter((sharing) => sharing.id !== sharingId));
+        showToast('Đã xoá lần chia tiền.');
+        return;
+      }
       const { error } = await supabase.rpc('delete_bill_sharing', { sharing_id_input: sharingId });
       if (error) throw error;
       await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
@@ -206,6 +266,15 @@ const BillSharingPage = () => {
   const toggleSharingExpand = (sharingId) => {
     setExpandedSharings(prev => {
       const next = new Set(prev);
+      if (next.has(sharingId)) next.delete(sharingId);
+      else next.add(sharingId);
+      return next;
+    });
+  };
+
+  const toggleParticipantExpand = (sharingId) => {
+    setExpandedParticipantSharings((current) => {
+      const next = new Set(current);
       if (next.has(sharingId)) next.delete(sharingId);
       else next.add(sharingId);
       return next;
@@ -256,6 +325,13 @@ const BillSharingPage = () => {
     if (!accepted) return;
     setLoading(true);
     try {
+      if (isDevelopmentMode()) {
+        setSharingHistory((current) => current.map((sharing) => (
+          sharing.id === sharingId ? { ...sharing, status: 'finalized' } : sharing
+        )));
+        showToast('Đã hoàn tất chia tiền và cập nhật chi phí.');
+        return;
+      }
       const { error } = await supabase.rpc('finalize_bill_sharing', {
         sharing_id_input: sharingId
       });
@@ -345,9 +421,10 @@ const BillSharingPage = () => {
         </div>
         <div className="flex flex-col lg:flex-row lg:space-x-8">
           <div className="flex-1 space-y-8">
-            <div className="bg-white p-6 rounded-lg shadow">
+            <div className="rounded-lg bg-white p-4 shadow sm:p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-4">1. Chọn khoản chi cần chia</h2>
               <div className="space-y-3 max-h-60 overflow-y-auto">
+                {expenses.length === 0 && <p className="rounded-lg border border-dashed border-gray-200 p-6 text-center text-sm text-gray-500">Không còn khoản chi nào đang chờ chia.</p>}
                 {expenses.map(expense => (
                   <div key={expense.id} className={`flex items-center justify-between p-3 rounded-md border ${selectedExpenses.has(expense.id) ? 'bg-indigo-50 border-indigo-300' : 'bg-gray-50'}`}>
                     <div className="flex items-center">
@@ -362,9 +439,10 @@ const BillSharingPage = () => {
                 ))}
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-2">2. Chọn người tham gia</h2>
-              <div className="flex items-center justify-between mb-2">
+            <div className="rounded-lg bg-white p-4 shadow sm:p-6">
+              <h2 className="mb-2 text-lg font-semibold text-gray-800"><span className="md:hidden">2. Chọn người tham gia và miễn phần chi</span><span className="hidden md:inline">2. Chọn người tham gia</span></h2>
+              <p className="mb-3 text-xs text-gray-500 md:hidden">Chọn “Miễn” cho người không phải đóng khoản chi này.</p>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-gray-600">Hiển thị:</span>
                   <select
@@ -377,7 +455,7 @@ const BillSharingPage = () => {
                     <option value="direct">Thu trực tiếp</option>
                   </select>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-end sm:self-auto">
                   <button
                     onClick={() => bulkSelectParticipants('select')}
                     className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
@@ -394,26 +472,36 @@ const BillSharingPage = () => {
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto">
+              <div className="grid max-h-96 grid-cols-1 gap-3 overflow-y-auto md:max-h-60 md:grid-cols-2 md:gap-4">
                 {employees
                   .filter(emp => emp.status === 'active' && !emp.leave_date)
                   .filter(emp => participantTypeFilter === 'all' ? true : participantTypeFilter === 'fund' ? emp.participates_in_fund : !emp.participates_in_fund)
                   .map(emp => (
-                    <div key={emp.id} className={`flex items-center p-3 rounded-md border ${selectedEmployees.has(emp.id) ? 'bg-green-50 border-green-300' : 'bg-gray-50'}`}>
+                    <div key={emp.id} className={`flex items-center gap-3 rounded-md border p-3 ${selectedEmployees.has(emp.id) ? 'border-green-300 bg-green-50' : 'bg-gray-50'}`}>
                       <input type="checkbox" id={`emp-${emp.id}`} checked={selectedEmployees.has(emp.id)} onChange={() => handleEmployeeToggle(emp.id)} className="h-5 w-5 rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                      <label htmlFor={`emp-${emp.id}`} className="ml-3 flex-1">
-                        <div className="flex items-center gap-2">
+                      <label htmlFor={`emp-${emp.id}`} className="min-w-0 flex-1 cursor-pointer">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium text-gray-800">{emp.name}</p>
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
                             {emp.participates_in_fund ? 'Đóng quỹ' : 'Thu trực tiếp'}
                           </span>
                         </div>
                       </label>
+                      {selectedEmployees.has(emp.id) && (
+                        <button
+                          type="button"
+                          onClick={() => handleBirthdayToggle(emp.id)}
+                          className={`inline-flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold md:hidden ${birthdayPeople.has(emp.id) ? 'bg-pink-100 text-pink-700 ring-1 ring-pink-300' : 'border border-gray-300 bg-white text-gray-600'}`}
+                          aria-pressed={birthdayPeople.has(emp.id)}
+                        >
+                          <Cake className="h-4 w-4" /> {birthdayPeople.has(emp.id) ? 'Được miễn' : 'Miễn'}
+                        </button>
+                      )}
                     </div>
                   ))}
               </div>
             </div>
-            <div className="bg-white p-6 rounded-lg shadow">
+            <div className="hidden rounded-lg bg-white p-6 shadow md:block">
               <h2 className="text-lg font-semibold text-gray-800 mb-2">3. Chọn người được miễn phần chi</h2>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-sm">
@@ -466,7 +554,14 @@ const BillSharingPage = () => {
               </div>
             </div>
           </div>
-          <div className="w-full lg:w-96 mt-8 lg:mt-0">
+          <div className="sticky bottom-3 z-30 mt-4 flex items-center gap-3 rounded-xl border border-indigo-100 bg-white p-3 shadow-xl lg:hidden">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-gray-500">{selectedEmployees.size} người · {selectedExpenses.size} khoản chi</p>
+              <p className="truncate text-lg font-bold text-indigo-700">{formatVND(totalAmount)}</p>
+            </div>
+            <button onClick={handleCreateSharing} className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-gray-400" disabled={loading || selectedExpenses.size === 0 || selectedEmployees.size === 0 || invalidSingleBirthday}>{loading ? 'Đang tạo...' : 'Tạo phiếu'}</button>
+          </div>
+          <div className="mt-8 hidden w-full lg:mt-0 lg:block lg:w-96">
             <div className="sticky top-6 space-y-6">
               <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Tạm tính</h3>
@@ -502,6 +597,7 @@ const BillSharingPage = () => {
         <div className="bg-white p-6 rounded-lg shadow mt-8">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Lịch sử chia chi phí</h2>
           <div className="space-y-4">
+            {sharingHistory.length === 0 && <p className="rounded-xl border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500">Chưa có lần chia chi phí nào.</p>}
             {sharingHistory.map(sharing => {
               const participants = sharing.bill_sharing_participants || [];
               const totalAmount = Number(sharing?.total_amount || 0);
@@ -514,11 +610,13 @@ const BillSharingPage = () => {
               const directOutstanding = Math.max(0, directTotalOwed - directCollected);
               const directProgress = directTotalOwed > 0 ? (directCollected / directTotalOwed) * 100 : 100;
               const canFinalize = directParticipants.length === 0 || directParticipants.every(p => p?.payment_status === 'paid');
+              const paidDirectCount = directParticipants.filter((participant) => participant?.payment_status === 'paid').length;
+              const isParticipantExpanded = expandedParticipantSharings.has(sharing.id);
 
               return (
-                <div key={sharing.id} className="border rounded-lg p-4">
-                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                    <div>
+                <div key={sharing.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                    <div className="min-w-0">
                       {/* Linked expense names */}
                       <div className="text-sm text-gray-800 font-medium">
                         {(() => {
@@ -598,57 +696,80 @@ const BillSharingPage = () => {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 md:gap-4">
+                    <div className="flex flex-wrap items-center gap-2 lg:max-w-md lg:justify-end">
                       <button
                         onClick={() => setDetailsSharing(sharing)}
-                        className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                       >
-                        <Eye className="h-4 w-4 mr-2" />
+                        <Eye className="mr-1.5 h-4 w-4" />
                         Xem chi tiết
                       </button>
                       <button
                         onClick={() => copySharingExpenses(sharing)}
-                        className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                        className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                         disabled={copyingId === sharing.id}
                         title="Sao chép danh sách chi phí"
                       >
-                        <Clipboard className="h-4 w-4 mr-2" />
+                        <Clipboard className="mr-1.5 h-4 w-4" />
                         {copyingId === sharing.id ? 'Đang sao chép…' : 'Sao chép'}
                       </button>
-                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status === 'finalized' ? 'Đã hoàn tất' : 'Đang xử lý'}</span>
-                      <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || !canFinalize || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                        <BadgeCheck className="h-4 w-4 mr-2" />
+                      <span className={`inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg px-3 text-xs font-semibold ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status === 'finalized' ? 'Đã hoàn tất' : 'Đang xử lý'}</span>
+                      <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || !canFinalize || loading} className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-gray-400">
+                        <BadgeCheck className="mr-1.5 h-4 w-4" />
                         {sharing.status === 'finalized' ? 'Đã hoàn tất' : canFinalize ? 'Hoàn tất và cập nhật' : 'Chờ thanh toán'}
                       </button>
-                      <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                      <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-lg bg-red-600 px-3 text-xs font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-gray-400">
                         Xoá
                       </button>
                     </div>
                   </div>
-                  <div className="mt-4">
-                    <h4 className="font-semibold mb-2">Người tham gia</h4>
-                    <div className="space-y-2">
-                      {sharing.bill_sharing_participants.map(p => (
-                        <div key={p.id} className="flex justify-between items-center">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p>{p.employees.name}</p>
-                              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                                {p.payment_method === 'fund' ? 'Đóng quỹ' : 'Thu trực tiếp'}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600">Cần thanh toán: {formatVND(p.amount_owed)}</p>
-                          </div>
-                          <button
-                            onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.status)}
-                            disabled={sharing.status === 'finalized' || updatingParticipantId === p.id}
-                            className={`px-3 py-1 text-sm rounded-full disabled:cursor-not-allowed disabled:opacity-60 ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}
-                          >
-                            {updatingParticipantId === p.id ? 'Đang cập nhật…' : p.payment_status === 'paid' ? 'Đã thanh toán' : 'Đánh dấu đã trả'}
-                          </button>
-                        </div>
-                      ))}
+                  <div className="mt-4 border-t border-gray-100 pt-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-sm text-gray-600">
+                        <span className="font-semibold text-gray-800">{participants.length} người tham gia</span>
+                        {directParticipants.length > 0 && <span> · Đã thu trực tiếp {paidDirectCount}/{directParticipants.length}</span>}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => toggleParticipantExpand(sharing.id)}
+                        className="inline-flex items-center whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                        aria-expanded={isParticipantExpanded}
+                      >
+                        {isParticipantExpanded ? <ChevronUp className="mr-1 h-4 w-4" /> : <ChevronDown className="mr-1 h-4 w-4" />}
+                        {isParticipantExpanded
+                          ? 'Thu gọn'
+                          : directParticipants.length > 0 && sharing.status !== 'finalized'
+                            ? 'Quản lý thanh toán'
+                            : 'Xem người tham gia'}
+                      </button>
                     </div>
+
+                    {isParticipantExpanded && (
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {participants.map((participant) => {
+                          const isDirect = participant.payment_method === 'direct';
+                          return (
+                            <div key={participant.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50/70 p-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-gray-900" title={participant.employees?.name}>{participant.employees?.name || 'Không rõ'}</p>
+                                <p className="mt-0.5 text-xs text-gray-500">{isDirect ? `Thu trực tiếp · ${formatVND(participant.amount_owed)}` : 'Thanh toán từ Quỹ'}</p>
+                              </div>
+                              {isDirect ? (
+                                <button
+                                  onClick={() => handlePaymentStatusToggle(participant.id, participant.payment_status, sharing.status)}
+                                  disabled={sharing.status === 'finalized' || updatingParticipantId === participant.id}
+                                  className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60 ${participant.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-700'}`}
+                                >
+                                  {updatingParticipantId === participant.id ? 'Đang lưu…' : participant.payment_status === 'paid' ? 'Đã thu' : 'Đánh dấu đã thu'}
+                                </button>
+                              ) : (
+                                <span className="shrink-0 whitespace-nowrap rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">Quỹ đã chi</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
