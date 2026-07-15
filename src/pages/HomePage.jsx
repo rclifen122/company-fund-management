@@ -270,18 +270,6 @@ const HomePage = () => {
           let status = 'pending';
           if (isCurrentMonthCovered) {
             status = 'paid';
-          } else if (latestPayment) {
-            const now = new Date();
-            const lastPaymentDate = new Date(latestPayment.payment_date);
-            const daysSinceLastPayment = Math.floor(
-              (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
-            );
-
-            if (lastPaymentDate > now) {
-              status = 'paid';
-            } else if (daysSinceLastPayment > 45) {
-              status = 'overdue';
-            }
           }
 
           return {

@@ -142,11 +142,6 @@ const EmployeesPage = () => {
             : 0;
           const monthsPaid = coveredMonths.size || fallbackMonthsPaid;
 
-          // Find latest payment
-          const latestPayment = employeePayments
-            .slice()
-            .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date))[0];
-
           // Determine current month status
           let status = 'pending';
           const membershipMode = getEmployeeMembershipMode(employee);
@@ -156,24 +151,6 @@ const EmployeesPage = () => {
             status = 'direct';
           } else if (coveredMonths.has(currentMonthKey)) {
             status = 'paid';
-          } else if (latestPayment) {
-            const lastPaymentDate = new Date(latestPayment.payment_date);
-            const daysSinceLastPayment = Math.floor(
-              (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
-            );
-            
-            console.log(`Employee ${employee.name}:`, {
-              lastPaymentDate: latestPayment.payment_date,
-              daysSinceLastPayment,
-              currentDate: now.toISOString().split('T')[0]
-            });
-            
-            // If payment date is in the future, consider it current
-            if (lastPaymentDate > now) {
-              status = 'paid';
-            } else if (daysSinceLastPayment > 45) {
-              status = 'overdue';
-            }
           }
 
           return {

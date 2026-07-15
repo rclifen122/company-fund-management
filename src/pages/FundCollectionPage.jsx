@@ -239,25 +239,9 @@ const FundCollectionPage = () => {
       let status = 'pending';
       if (isTargetMonthCovered) {
         status = 'paid';
-      } else if (latestPayment && monthFilter === 'all') {
-        // Fallback logic only for "all" filter (legacy logic)
-        const now = new Date();
-        const lastPaymentDate = new Date(latestPayment.payment_date);
-        const daysSinceLastPayment = Math.floor(
-          (now - lastPaymentDate) / (1000 * 60 * 60 * 24)
-        );
-
-        if (lastPaymentDate > now) {
-          status = 'paid';
-        } else if (daysSinceLastPayment > 45) {
-          status = 'overdue';
-        }
       } else if (monthFilter !== 'all') {
-        // If a specific month is selected and not paid, it's pending (or overdue if in past)
-        // For simplicity, just mark as pending if not paid for that month
-        status = 'pending';
-
-        // Optional: Check if target month is in the past to mark overdue
+        // The current month remains pending. Only a completed month can be
+        // overdue, regardless of how old the employee's last payment is.
         const today = new Date();
         const targetDate = new Date(targetYear, targetMonth + 1, 0); // End of target month
         if (targetDate < today && !isTargetMonthCovered) {
