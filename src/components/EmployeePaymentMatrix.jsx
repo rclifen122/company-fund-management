@@ -1,6 +1,10 @@
-import { AlertTriangle, CheckCircle, Clock, Minus } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, History, Minus } from 'lucide-react';
 import { formatVND } from '../utils/format';
-import { isActiveFundMember } from '../utils/employeeMembership';
+import {
+  EMPLOYEE_MEMBERSHIP,
+  getEmployeeMembershipMode,
+  isActiveFundMember,
+} from '../utils/employeeMembership';
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => ({
   number: index + 1,
@@ -13,8 +17,9 @@ const getDateMonthKey = (value) => {
   return match ? `${match[1]}-${match[2]}` : null;
 };
 
-const getCoveredMonths = (payments) => {
+const getCoveredMonths = (payments, reconciliations) => {
   const coveredByEmployee = new Map();
+  const reconciledByEmployee = new Map();
 
   payments.forEach((payment) => {
     const employeeId = String(payment.employee_id);
@@ -33,10 +38,26 @@ const getCoveredMonths = (payments) => {
     });
   });
 
-  return coveredByEmployee;
+  reconciliations.forEach((reconciliation) => {
+    const employeeId = String(reconciliation.employee_id);
+    if (!coveredByEmployee.has(employeeId)) {
+      coveredByEmployee.set(employeeId, new Set());
+    }
+    if (!reconciledByEmployee.has(employeeId)) {
+      reconciledByEmployee.set(employeeId, new Set());
+    }
+
+    if (/^\d{4}-\d{2}$/.test(reconciliation.month_key)) {
+      coveredByEmployee.get(employeeId).add(reconciliation.month_key);
+      reconciledByEmployee.get(employeeId).add(reconciliation.month_key);
+    }
+  });
+
+  return { coveredByEmployee, reconciledByEmployee };
 };
 
-const getMonthStatus = (employee, monthKey, coveredMonths, currentMonthKey) => {
+const getMonthStatus = (employee, monthKey, coveredMonths, reconciledMonths, currentMonthKey) => {
+  if (reconciledMonths.has(monthKey)) return 'reconciled';
   if (coveredMonths.has(monthKey)) return 'paid';
 
   const joinMonthKey = getDateMonthKey(employee.join_date);
@@ -56,6 +77,11 @@ const STATUS_STYLES = {
     label: 'Đã nộp',
     className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     Icon: CheckCircle,
+  },
+  reconciled: {
+    label: 'Đã nộp (đối soát lịch sử)',
+    className: 'bg-teal-50 text-teal-700 border-teal-300',
+    Icon: History,
   },
   pending: {
     label: 'Chờ nộp',
@@ -95,7 +121,7 @@ const MonthStatusCell = ({ status }) => {
   );
 };
 
-const EmployeeRows = ({ employees, year, coveredByEmployee, currentMonthKey }) => {
+const EmployeeRows = ({ employees, year, coveredByEmployee, reconciledByEmployee, currentMonthKey }) => {
   if (employees.length === 0) {
     return (
       <tr>
@@ -108,6 +134,8 @@ const EmployeeRows = ({ employees, year, coveredByEmployee, currentMonthKey }) =
 
   return employees.map((employee) => {
     const coveredMonths = coveredByEmployee.get(String(employee.id)) || new Set();
+    const reconciledMonths = reconciledByEmployee.get(String(employee.id)) || new Set();
+    const membershipMode = getEmployeeMembershipMode(employee);
     const paidMonthsInYear = MONTHS.filter(({ number }) => (
       coveredMonths.has(`${year}-${String(number).padStart(2, '0')}`)
     )).length;
@@ -117,12 +145,18 @@ const EmployeeRows = ({ employees, year, coveredByEmployee, currentMonthKey }) =
         <td className="sticky left-0 z-10 min-w-56 border border-gray-200 bg-white px-4 py-3 shadow-[1px_0_0_0_#e5e7eb]">
           <div className="font-medium text-gray-900">{employee.name}</div>
           <div className="mt-0.5 text-xs text-gray-500">
-            {employee.department || 'Chưa có phòng ban'} · {formatVND(employee.monthly_contribution || employee.monthly_contribution_amount || 0)}/tháng
+            {employee.department || 'Chưa có phòng ban'} · {
+              membershipMode === EMPLOYEE_MEMBERSHIP.DIRECT
+                ? 'Thu trực tiếp trên từng khoản chi'
+                : membershipMode === EMPLOYEE_MEMBERSHIP.INACTIVE
+                  ? 'Đã ngừng tham gia'
+                  : `${formatVND(employee.monthly_contribution || employee.monthly_contribution_amount || 0)}/tháng`
+            }
           </div>
         </td>
         {MONTHS.map(({ number }) => {
           const monthKey = `${year}-${String(number).padStart(2, '0')}`;
-          const status = getMonthStatus(employee, monthKey, coveredMonths, currentMonthKey);
+          const status = getMonthStatus(employee, monthKey, coveredMonths, reconciledMonths, currentMonthKey);
           return <MonthStatusCell key={monthKey} status={status} />;
         })}
         <td className="border border-gray-200 px-3 py-3 text-center font-semibold text-gray-700">
@@ -136,11 +170,14 @@ const EmployeeRows = ({ employees, year, coveredByEmployee, currentMonthKey }) =
 const EmployeePaymentMatrix = ({
   employees,
   payments,
+  reconciliations = [],
   searchTerm,
   onSearchChange,
   selectedYear,
   onYearChange,
   availableYears,
+  onOpenReconciliation,
+  reconciliationAvailable = false,
 }) => {
   const normalizedSearch = searchTerm.trim().toLocaleLowerCase('vi-VN');
   const matchingEmployees = employees
@@ -152,8 +189,13 @@ const EmployeePaymentMatrix = ({
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'vi-VN'));
 
   const activeEmployees = matchingEmployees.filter(isActiveFundMember);
-  const nonFundEmployees = matchingEmployees.filter((employee) => !isActiveFundMember(employee));
-  const coveredByEmployee = getCoveredMonths(payments);
+  const directEmployees = matchingEmployees.filter((employee) => (
+    getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.DIRECT
+  ));
+  const inactiveEmployees = matchingEmployees.filter((employee) => (
+    getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.INACTIVE
+  ));
+  const { coveredByEmployee, reconciledByEmployee } = getCoveredMonths(payments, reconciliations);
   const now = new Date();
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -166,8 +208,25 @@ const EmployeePaymentMatrix = ({
             <p className="mt-1 text-sm text-gray-500">
               Theo dõi tháng đã thu quỹ của từng nhân viên trong năm {selectedYear}.
             </p>
+            {!reconciliationAvailable && (
+              <p className="mt-1 text-xs font-medium text-amber-700">
+                Chạy script V11 trên Supabase để bật chức năng đối soát lịch sử.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={onOpenReconciliation}
+              disabled={!reconciliationAvailable}
+              title={reconciliationAvailable
+                ? 'Đánh dấu các tháng đã thu trước khi dùng ứng dụng'
+                : 'Cần chạy script database đối soát trước'}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-800 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <History className="h-4 w-4" />
+              Đối soát lịch sử
+            </button>
             <input
               type="search"
               placeholder="Tìm nhân viên hoặc phòng ban..."
@@ -231,18 +290,33 @@ const EmployeePaymentMatrix = ({
               employees={activeEmployees}
               year={selectedYear}
               coveredByEmployee={coveredByEmployee}
+              reconciledByEmployee={reconciledByEmployee}
+              currentMonthKey={currentMonthKey}
+            />
+
+            <tr className="bg-blue-50">
+              <th colSpan="14" className="border border-blue-100 px-4 py-2 text-left text-sm font-semibold text-blue-800">
+                Thu trực tiếp trên từng khoản chi ({directEmployees.length})
+              </th>
+            </tr>
+            <EmployeeRows
+              employees={directEmployees}
+              year={selectedYear}
+              coveredByEmployee={coveredByEmployee}
+              reconciledByEmployee={reconciledByEmployee}
               currentMonthKey={currentMonthKey}
             />
 
             <tr className="bg-slate-100">
               <th colSpan="14" className="border border-slate-200 px-4 py-2 text-left text-sm font-semibold text-slate-700">
-                Direct / đã ngừng tham gia ({nonFundEmployees.length})
+                Đã ngừng tham gia ({inactiveEmployees.length})
               </th>
             </tr>
             <EmployeeRows
-              employees={nonFundEmployees}
+              employees={inactiveEmployees}
               year={selectedYear}
               coveredByEmployee={coveredByEmployee}
+              reconciledByEmployee={reconciledByEmployee}
               currentMonthKey={currentMonthKey}
             />
           </tbody>

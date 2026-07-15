@@ -195,6 +195,13 @@ const HomePage = () => {
         const employeesData = employeesResponse.data || [];
         if (employeesResponse.error) throw employeesResponse.error;
 
+        const reconciliationsResponse = await supabase
+          .from('fund_payment_reconciliations')
+          .select('employee_id, month_key');
+        const reconciliationsData = reconciliationsResponse.error
+          ? []
+          : reconciliationsResponse.data || [];
+
         // Get ALL expenses for monthly chart calculation
         const expensesResponse = await supabase
           .from('expenses')
@@ -254,7 +261,10 @@ const HomePage = () => {
           const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
           const isCurrentMonthCovered = employeePayments.some(payment => {
             return payment.months_covered && payment.months_covered.includes(currentMonthKey);
-          });
+          }) || reconciliationsData.some(reconciliation => (
+            String(reconciliation.employee_id) === String(employee.id)
+            && reconciliation.month_key === currentMonthKey
+          ));
 
           // Determine current month status
           let status = 'pending';

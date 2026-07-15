@@ -107,10 +107,17 @@ const EmployeesPage = () => {
           .from('fund_payments')
           .select('employee_id, payment_date, amount, months_covered');
 
+        const reconciliationsResponse = await supabase
+          .from('fund_payment_reconciliations')
+          .select('employee_id, month_key');
+
         console.log('Payments response:', paymentsResponse);
         
         const employeesData = employeesResponse.data || [];
         const paymentsData = paymentsResponse.data || [];
+        const reconciliationsData = reconciliationsResponse.error
+          ? []
+          : reconciliationsResponse.data || [];
 
         // Process employees data to add payment status
         const now = new Date();
@@ -127,6 +134,9 @@ const EmployeesPage = () => {
 
             return payment.payment_date ? [String(payment.payment_date).slice(0, 7)] : [];
           }));
+          reconciliationsData
+            .filter((reconciliation) => String(reconciliation.employee_id) === String(employee.id))
+            .forEach((reconciliation) => coveredMonths.add(reconciliation.month_key));
           const fallbackMonthsPaid = Number(employee.monthly_contribution_amount) > 0
             ? Math.round(Number(employee.total_paid) / Number(employee.monthly_contribution_amount))
             : 0;

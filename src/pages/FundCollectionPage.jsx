@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
 import PaymentModal from '../components/PaymentModal';
 import EmployeePaymentMatrix from '../components/EmployeePaymentMatrix';
+import FundReconciliationModal from '../components/FundReconciliationModal';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND, formatDate } from '../utils/format';
@@ -10,11 +11,15 @@ import { Plus, Calendar, TrendingUp, Users, PiggyBank, Filter, Eye, Download, Cr
 
 const FundCollectionPage = () => {
   const [payments, setPayments] = useState([]);
+  const [reconciliations, setReconciliations] = useState([]);
   const [employees, setEmployees] = useState([]);
-  const [rawData, setRawData] = useState({ employees: [], payments: [] });
+  const [rawData, setRawData] = useState({ employees: [], payments: [], reconciliations: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReconciliationModal, setShowReconciliationModal] = useState(false);
+  const [savingReconciliation, setSavingReconciliation] = useState(false);
+  const [reconciliationAvailable, setReconciliationAvailable] = useState(false);
   const [statusYear, setStatusYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('all'); // all, cash, bank_transfer, e_wallet
@@ -99,7 +104,8 @@ const FundCollectionPage = () => {
         ];
 
         setTimeout(() => {
-          setRawData({ employees: mockEmployees, payments: mockPayments });
+          setRawData({ employees: mockEmployees, payments: mockPayments, reconciliations: [] });
+          setReconciliationAvailable(true);
           setLoading(false);
         }, 1000);
         return;
@@ -134,15 +140,34 @@ const FundCollectionPage = () => {
         throw paymentsResponse.error;
       }
 
+      const reconciliationsResponse = await supabase
+        .from('fund_payment_reconciliations')
+        .select('*')
+        .order('month_key', { ascending: true });
+
+      if (reconciliationsResponse.error) {
+        console.warn('Historical reconciliation is not available yet:', reconciliationsResponse.error);
+        setReconciliationAvailable(false);
+      } else {
+        setReconciliationAvailable(true);
+      }
+
       const employeesData = employeesResponse.data || [];
       const paymentsData = paymentsResponse.data || [];
+      const reconciliationsData = reconciliationsResponse.error
+        ? []
+        : reconciliationsResponse.data || [];
 
-      setRawData({ employees: employeesData, payments: paymentsData });
+      setRawData({
+        employees: employeesData,
+        payments: paymentsData,
+        reconciliations: reconciliationsData,
+      });
       setLoading(false);
 
     } catch (error) {
       console.error('Error fetching fund collection data:', error);
-      setRawData({ employees: [], payments: [] });
+      setRawData({ employees: [], payments: [], reconciliations: [] });
       setLoadError(error.message || 'Unable to load fund collection data.');
       setLoading(false);
     }
@@ -154,7 +179,11 @@ const FundCollectionPage = () => {
 
   // Process data when rawData or filters change
   useEffect(() => {
-    const { employees: employeesData, payments: paymentsData } = rawData;
+    const {
+      employees: employeesData,
+      payments: paymentsData,
+      reconciliations: reconciliationsData,
+    } = rawData;
 
     // Process payments data to add employee info
     const processedPayments = paymentsData?.map(payment => ({
@@ -166,6 +195,7 @@ const FundCollectionPage = () => {
     })) || [];
 
     setPayments(processedPayments);
+    setReconciliations(reconciliationsData || []);
 
     // Determine target month/year for status calculation
     let targetMonth = new Date().getMonth(); // Default to current month (0-11)
@@ -200,7 +230,10 @@ const FundCollectionPage = () => {
       const targetMonthKey = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}`;
       const isTargetMonthCovered = employeePayments.some(payment => {
         return payment.months_covered && payment.months_covered.includes(targetMonthKey);
-      });
+      }) || reconciliationsData.some(reconciliation => (
+        String(reconciliation.employee_id) === String(employee.id)
+        && reconciliation.month_key === targetMonthKey
+      ));
 
       // Determine status based on target month coverage
       let status = 'pending';
@@ -269,6 +302,25 @@ const FundCollectionPage = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (isDevelopmentMode() || !reconciliationAvailable) return;
+
+    const reconciliationsChannel = supabase
+      .channel('fund-payment-reconciliations-changes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'fund_payment_reconciliations',
+      }, async () => {
+        await fetchFundCollectionData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(reconciliationsChannel);
+    };
+  }, [reconciliationAvailable]);
+
 
   // The payment ledger is the single source of truth for collected money.
   const totalCollected = payments.reduce((sum, payment) => sum + payment.amount, 0);
@@ -307,6 +359,9 @@ const FundCollectionPage = () => {
       const paymentYear = payment.payment_date ? new Date(payment.payment_date).getFullYear() : null;
       return paymentYear ? [...coveredYears, paymentYear] : coveredYears;
     }),
+    ...reconciliations
+      .map((reconciliation) => Number(String(reconciliation.month_key).slice(0, 4)))
+      .filter(Number.isInteger),
     ...employees.flatMap((employee) => [employee.join_date, employee.leave_date]
       .filter(Boolean)
       .map((date) => new Date(date).getFullYear())
@@ -458,6 +513,71 @@ const FundCollectionPage = () => {
     } catch (error) {
       console.error('Error recording payment:', error);
       alert('Error recording payment: ' + error.message);
+    }
+  };
+
+  const handleReconciliationSave = async ({ employeeId, year, monthKeys }) => {
+    setSavingReconciliation(true);
+    try {
+      const existingMonthKeys = new Set(reconciliations
+        .filter((item) => (
+          String(item.employee_id) === String(employeeId)
+          && String(item.month_key).startsWith(`${year}-`)
+        ))
+        .map((item) => item.month_key));
+      const desiredMonthKeys = new Set(monthKeys);
+      const additions = monthKeys.filter((monthKey) => !existingMonthKeys.has(monthKey));
+      const removals = [...existingMonthKeys].filter((monthKey) => !desiredMonthKeys.has(monthKey));
+
+      if (isDevelopmentMode()) {
+        setRawData((current) => ({
+          ...current,
+          reconciliations: [
+            ...current.reconciliations.filter((item) => !(
+              String(item.employee_id) === String(employeeId)
+              && removals.includes(item.month_key)
+            )),
+            ...additions.map((monthKey) => ({
+              id: `demo-${employeeId}-${monthKey}`,
+              employee_id: employeeId,
+              month_key: monthKey,
+              notes: 'Đối soát dữ liệu trước khi dùng ứng dụng',
+            })),
+          ],
+        }));
+        return true;
+      }
+
+      if (additions.length > 0) {
+        const { error: insertError } = await supabase
+          .from('fund_payment_reconciliations')
+          .upsert(additions.map((monthKey) => ({
+            employee_id: employeeId,
+            month_key: monthKey,
+            notes: 'Đối soát dữ liệu trước khi dùng ứng dụng',
+          })), { onConflict: 'employee_id,month_key' });
+
+        if (insertError) throw insertError;
+      }
+
+      if (removals.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('fund_payment_reconciliations')
+          .delete()
+          .eq('employee_id', employeeId)
+          .in('month_key', removals);
+
+        if (deleteError) throw deleteError;
+      }
+
+      await fetchFundCollectionData();
+      return true;
+    } catch (error) {
+      console.error('Error saving historical reconciliation:', error);
+      alert('Không thể lưu đối soát lịch sử: ' + error.message);
+      return false;
+    } finally {
+      setSavingReconciliation(false);
     }
   };
 
@@ -660,11 +780,14 @@ const FundCollectionPage = () => {
         <EmployeePaymentMatrix
           employees={employees}
           payments={payments}
+          reconciliations={reconciliations}
           searchTerm={searchTerm}
           onSearchChange={setSearchTerm}
           selectedYear={statusYear}
           onYearChange={setStatusYear}
           availableYears={statusYears}
+          onOpenReconciliation={() => setShowReconciliationModal(true)}
+          reconciliationAvailable={reconciliationAvailable}
         />
 
         {/* Payment History with Advanced Filtering */}
@@ -903,6 +1026,20 @@ const FundCollectionPage = () => {
           onClose={() => setShowPaymentModal(false)}
           employees={employees}
           onSubmit={handlePaymentSubmit}
+        />
+
+        <FundReconciliationModal
+          isOpen={showReconciliationModal}
+          employees={employees}
+          payments={payments}
+          reconciliations={reconciliations}
+          initialYear={statusYear}
+          availableYears={statusYears}
+          isSaving={savingReconciliation}
+          onClose={() => {
+            if (!savingReconciliation) setShowReconciliationModal(false);
+          }}
+          onSave={handleReconciliationSave}
         />
       </div>
     </Layout>
