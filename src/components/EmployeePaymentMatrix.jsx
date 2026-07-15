@@ -60,13 +60,14 @@ const getMonthStatus = (employee, monthKey, coveredMonths, reconciledMonths, cur
   if (reconciledMonths.has(monthKey)) return 'reconciled';
   if (coveredMonths.has(monthKey)) return 'paid';
 
+  // Direct and inactive employees have no monthly fund obligation. Preserve
+  // their historical paid/reconciled cells above, but never show debt for an
+  // uncovered month.
+  if (!isActiveFundMember(employee)) return 'not_applicable';
+
   const joinMonthKey = getDateMonthKey(employee.join_date);
-  const leaveMonthKey = getDateMonthKey(employee.leave_date);
 
   if (joinMonthKey && monthKey < joinMonthKey) return 'not_applicable';
-  if (leaveMonthKey && monthKey > leaveMonthKey) return 'not_applicable';
-
-  if (!isActiveFundMember(employee) && !leaveMonthKey) return 'not_applicable';
   if (monthKey > currentMonthKey) return 'upcoming';
   if (monthKey === currentMonthKey) return 'pending';
   return 'overdue';
