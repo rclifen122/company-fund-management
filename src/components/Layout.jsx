@@ -15,7 +15,6 @@ import {
   Share2,
   Moon,
   Sun,
-  History,
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -58,7 +57,6 @@ const Layout = ({ children }) => {
     { name: 'Thu Quỹ', href: '/fund-collection', icon: PiggyBank },
     { name: 'Chi Phí', href: '/expenses', icon: Receipt },
     { name: 'Chia Tiền', href: '/bill-sharing', icon: Share2 },
-    { name: 'Nhật Ký Hoạt Động', href: '/audit-logs', icon: History },
     { name: 'Cài Đặt', href: '/settings', icon: Settings },
   ];
 

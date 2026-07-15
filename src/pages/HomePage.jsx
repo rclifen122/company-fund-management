@@ -582,10 +582,13 @@ const HomePage = () => {
 
         {/* Enhanced Payment Status Overview */}
         <div className="bg-white dark:bg-gray-800/80 p-6 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card">
-          <div className="flex justify-between items-center mb-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Tình Trạng Đóng Quỹ Tháng Này</h3>
-            <div className="text-sm text-gray-500">
+            <div className="flex items-center gap-3 text-sm text-gray-500">
               <span className="dark:text-gray-400">{new Date().toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</span>
+              <button type="button" onClick={() => navigate('/fund-collection')} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <Eye className="h-3.5 w-3.5" /> Xem chi tiết
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-4">

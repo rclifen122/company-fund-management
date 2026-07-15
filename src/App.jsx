@@ -13,7 +13,6 @@ const FundCollectionPage = lazy(() => import('./pages/FundCollectionPage'));
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const BillSharingPage = lazy(() => import('./pages/BillSharingPage'));
-const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
 
 const ProtectedPage = ({ children }) => (
   <ProtectedRoute>{children}</ProtectedRoute>
@@ -34,7 +33,6 @@ function App() {
             <Route path="/expenses" element={<ProtectedPage><ExpensesPage /></ProtectedPage>} />
             <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
             <Route path="/bill-sharing" element={<ProtectedPage><BillSharingPage /></ProtectedPage>} />
-            <Route path="/audit-logs" element={<ProtectedPage><AuditLogPage /></ProtectedPage>} />
           </Routes>
         </Suspense>
       </Router>

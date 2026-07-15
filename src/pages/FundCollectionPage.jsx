@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Calendar, CheckCircle, Clock, PiggyBank, Plus, TrendingUp, Users } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckCircle, Clock, History, PiggyBank, Plus, TrendingUp, Users } from 'lucide-react';
 import Layout from '../components/Layout';
 import PaymentModal from '../components/PaymentModal';
 import EmployeePaymentMatrix from '../components/EmployeePaymentMatrix';
+import FundReconciliationModal from '../components/FundReconciliationModal';
 import { ErrorState, PageSkeleton } from '../components/PageState';
+import PageTransition from '../components/PageTransition';
 import { useFeedback } from '../contexts/feedback';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
@@ -28,6 +30,8 @@ const FundCollectionPage = () => {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReconciliationModal, setShowReconciliationModal] = useState(false);
+  const [savingReconciliation, setSavingReconciliation] = useState(false);
   const [statusYear, setStatusYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -163,20 +167,73 @@ const FundCollectionPage = () => {
     }
   };
 
+  const handleReconciliationSave = async ({ employeeId, year, monthKeys }) => {
+    setSavingReconciliation(true);
+    try {
+      const existingMonths = new Set(reconciliations
+        .filter((item) => String(item.employee_id) === String(employeeId) && String(item.month_key).startsWith(`${year}-`))
+        .map((item) => item.month_key));
+      const desiredMonths = new Set(monthKeys);
+      const additions = monthKeys.filter((monthKey) => !existingMonths.has(monthKey));
+      const removals = [...existingMonths].filter((monthKey) => !desiredMonths.has(monthKey));
+
+      if (isDevelopmentMode()) {
+        setReconciliations((current) => [
+          ...current.filter((item) => !(String(item.employee_id) === String(employeeId) && removals.includes(item.month_key))),
+          ...additions.map((monthKey) => ({ id: `demo-${employeeId}-${monthKey}`, employee_id: employeeId, month_key: monthKey })),
+        ]);
+      } else {
+        if (additions.length > 0) {
+          const { error: insertError } = await supabase
+            .from('fund_payment_reconciliations')
+            .upsert(additions.map((monthKey) => ({
+              employee_id: employeeId,
+              month_key: monthKey,
+              notes: 'Đối soát dữ liệu lịch sử',
+            })), { onConflict: 'employee_id,month_key' });
+          if (insertError) throw insertError;
+        }
+
+        if (removals.length > 0) {
+          const { error: deleteError } = await supabase
+            .from('fund_payment_reconciliations')
+            .delete()
+            .eq('employee_id', employeeId)
+            .in('month_key', removals);
+          if (deleteError) throw deleteError;
+        }
+        await fetchFundCollectionData();
+      }
+
+      showToast(`Đã lưu đối soát năm ${year}.`);
+      return true;
+    } catch (error) {
+      showToast(`Không thể lưu đối soát: ${error.message}`, 'error');
+      return false;
+    } finally {
+      setSavingReconciliation(false);
+    }
+  };
+
   if (loading) return <Layout><PageSkeleton rows={7} /></Layout>;
   if (loadError) return <Layout><ErrorState title="Không thể tải dữ liệu thu quỹ" message={loadError} onRetry={fetchFundCollectionData} /></Layout>;
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <PageTransition className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Thu Quỹ</h1>
             <p className="mt-1 text-sm text-gray-500">Theo dõi đóng góp và tình trạng thu quỹ của nhân viên.</p>
           </div>
-          <button onClick={() => setShowPaymentModal(true)} className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
-            <Plus className="mr-2 h-4 w-4" /> Nhập Quỹ
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button onClick={() => setShowReconciliationModal(true)} className="inline-flex items-center justify-center rounded-md border border-teal-300 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-800 shadow-sm hover:bg-teal-100">
+              <History className="mr-2 h-4 w-4" /> Đối soát lịch sử
+            </button>
+            <button onClick={() => setShowPaymentModal(true)} className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">
+              <Plus className="mr-2 h-4 w-4" /> Nhập Quỹ
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -209,7 +266,18 @@ const FundCollectionPage = () => {
         />
 
         <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} employees={activeFundEmployees} onSubmit={handlePaymentSubmit} />
-      </div>
+        <FundReconciliationModal
+          isOpen={showReconciliationModal}
+          employees={employees}
+          payments={payments}
+          reconciliations={reconciliations}
+          initialYear={statusYear}
+          availableYears={statusYears}
+          isSaving={savingReconciliation}
+          onClose={() => { if (!savingReconciliation) setShowReconciliationModal(false); }}
+          onSave={handleReconciliationSave}
+        />
+      </PageTransition>
     </Layout>
   );
 };
