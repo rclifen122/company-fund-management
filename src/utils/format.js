@@ -10,7 +10,7 @@ export const formatDate = (dateString) => {
   if (!dateString) return '-';
   try {
     return new Date(dateString).toLocaleDateString('vi-VN');
-  } catch (e) {
+  } catch {
     return dateString;
   }
 };

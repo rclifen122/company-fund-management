@@ -15,7 +15,7 @@ const OPTIONS = [
   },
   {
     mode: EMPLOYEE_MEMBERSHIP.DIRECT,
-    title: 'Direct',
+    title: 'Thu trực tiếp',
     description: 'Không đóng quỹ hàng tháng; chỉ thanh toán phần được chia trên từng chi phí.',
     Icon: Receipt,
     style: 'border-blue-200 bg-blue-50 text-blue-800 hover:border-blue-400',

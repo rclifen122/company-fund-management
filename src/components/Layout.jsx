@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
 import {
   Home,
   Users,
@@ -14,10 +15,12 @@ import {
   Share2,
   Moon,
   Sun,
+  History,
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [accountName, setAccountName] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('theme') === 'dark';
@@ -37,12 +40,25 @@ const Layout = ({ children }) => {
     }
   }, [darkMode]);
 
+  useEffect(() => {
+    if (isDevelopmentMode()) {
+      setAccountName('Quản trị viên');
+      return;
+    }
+
+    supabase.auth.getUser().then(({ data }) => {
+      const user = data?.user;
+      setAccountName(user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email || 'Tài khoản');
+    });
+  }, []);
+
   const navigation = [
     { name: 'Bảng Điều Khiển', href: '/', icon: Home },
     { name: 'Nhân Viên', href: '/employees', icon: Users },
     { name: 'Thu Quỹ', href: '/fund-collection', icon: PiggyBank },
     { name: 'Chi Phí', href: '/expenses', icon: Receipt },
     { name: 'Chia Tiền', href: '/bill-sharing', icon: Share2 },
+    { name: 'Nhật Ký Hoạt Động', href: '/audit-logs', icon: History },
     { name: 'Cài Đặt', href: '/settings', icon: Settings },
   ];
 
@@ -114,7 +130,7 @@ const Layout = ({ children }) => {
                 <PiggyBank className="h-5 w-5 text-white" />
               </div>
               <span className="ml-2.5 text-lg font-bold text-gray-900 dark:text-white">
-                Company Fund
+                Quỹ Công Ty
               </span>
             </div>
             <button
@@ -138,7 +154,7 @@ const Layout = ({ children }) => {
               <PiggyBank className="h-5 w-5 text-white" />
             </div>
             <span className="ml-2.5 text-lg font-bold text-gray-900 dark:text-white">
-              Company Fund
+              Quỹ Công Ty
             </span>
           </div>
           <div className="flex-1 flex flex-col overflow-y-auto">
@@ -161,14 +177,14 @@ const Layout = ({ children }) => {
             </button>
             
             <div className="flex items-center space-x-3 ml-auto">
-              <div className="flex items-center space-x-2">
+              <Link to="/settings" className="flex items-center space-x-2 rounded-lg px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-800">
                 <div className="w-8 h-8 bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-600 rounded-full flex items-center justify-center">
                   <User className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                 </div>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">
-                  Chào mừng trở lại!
+                  {accountName}
                 </span>
-              </div>
+              </Link>
             </div>
           </div>
         </div>

@@ -3,12 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import StatCard from '../components/StatCard';
 import { PageTransition, StaggerContainer, StaggerItem } from '../components/PageTransition';
-import PaymentModal from '../components/PaymentModal';
-import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
-import { formatVND, formatDate } from '../utils/format';
-import { getPaymentStatusColor } from '../utils/helpers';
+import { formatVND } from '../utils/format';
+import { ErrorState, PageSkeleton } from '../components/PageState';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
 import {
   LineChart,
@@ -43,7 +41,6 @@ const HomePage = () => {
   const [monthlyData, setMonthlyData] = useState([]);
   const [expensesByCategory, setExpensesByCategory] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -114,26 +111,6 @@ const HomePage = () => {
             },
           ]);
 
-          setEmployees([
-            {
-              id: 1,
-              name: 'Nguyễn Văn A',
-              department: 'IT',
-              monthly_contribution_amount: 100000
-            },
-            {
-              id: 2,
-              name: 'Trần Thị B',
-              department: 'HR',
-              monthly_contribution_amount: 100000
-            },
-            {
-              id: 3,
-              name: 'Lê Văn C',
-              department: 'Finance',
-              monthly_contribution_amount: 100000
-            }
-          ]);
           return;
         }
 
@@ -312,9 +289,6 @@ const HomePage = () => {
           setStats(newStats);
         }
 
-        // Set employees for payment modal
-        setEmployees(employeesData || []);
-
         // Process monthly chart data using ALL payments
         const monthlyChartData = [];
         const today = new Date();
@@ -368,7 +342,7 @@ const HomePage = () => {
             try {
               const paymentDate = new Date(p.payment_date);
               return paymentDate.getMonth() === targetMonth && paymentDate.getFullYear() === targetYear;
-            } catch (error) {
+            } catch {
               return false;
             }
           }).length} records`);
@@ -377,7 +351,7 @@ const HomePage = () => {
             try {
               const expenseDate = new Date(e.expense_date);
               return expenseDate.getMonth() === targetMonth && expenseDate.getFullYear() === targetYear;
-            } catch (error) {
+            } catch {
               return false;
             }
           }).length} records`);
@@ -432,11 +406,11 @@ const HomePage = () => {
           try {
             const timeAgo = payment.created_at ?
               new Date(payment.created_at).toLocaleDateString('vi-VN') :
-              'Unknown time';
+              'Không rõ thời gian';
             activities.push({
               id: payment.id || Date.now(),
               type: 'payment',
-              description: `${payment.employees?.name || 'Unknown Employee'} nộp quỹ`,
+              description: `${payment.employees?.name || 'Nhân viên chưa xác định'} nộp quỹ`,
               amount: `+${new Intl.NumberFormat('vi-VN').format(payment.amount || 0)} ₫`,
               time: timeAgo,
               status: 'completed'
@@ -452,11 +426,11 @@ const HomePage = () => {
           try {
             const timeAgo = expense.created_at ?
               new Date(expense.created_at).toLocaleDateString('vi-VN') :
-              'Unknown time';
+              'Không rõ thời gian';
             activities.push({
               id: expense.id || Date.now(),
               type: 'expense',
-              description: expense.description || 'No description',
+              description: expense.description || 'Không có mô tả',
               amount: `-${new Intl.NumberFormat('vi-VN').format(expense.amount || 0)} ₫`,
               time: timeAgo,
               status: 'completed'
@@ -482,12 +456,7 @@ const HomePage = () => {
   if (loading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-full min-h-screen">
-          <div className="text-xl text-gray-500 flex flex-col items-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-            Loading dashboard data...
-          </div>
-        </div>
+        <PageSkeleton rows={6} />
       </Layout>
     );
   }
@@ -495,85 +464,10 @@ const HomePage = () => {
   if (loadError) {
     return (
       <Layout>
-        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-          <p className="text-red-600">Unable to load dashboard data: {loadError}</p>
-          <button onClick={() => setRefreshTrigger(value => value + 1)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700">Retry</button>
-        </div>
+        <ErrorState message={loadError} onRetry={() => setRefreshTrigger((value) => value + 1)} />
       </Layout>
     );
   }
-  const handlePaymentSubmit = async (paymentData) => {
-    try {
-      if (isDevelopmentMode()) {
-        console.log('Payment data (Demo mode):', paymentData);
-        alert('Payment recorded successfully! (Demo mode)');
-        return;
-      }
-
-      // Insert payment into Supabase
-      const { data, error } = await supabase
-        .from('fund_payments')
-        .insert([{
-          employee_id: paymentData.employee_id,
-          amount: paymentData.amount,
-          payment_date: paymentData.payment_date,
-          months_covered: paymentData.months_covered,
-          payment_method: paymentData.payment_method || 'cash',
-          notes: paymentData.notes
-        }]);
-
-      if (error) throw error;
-
-      alert('Payment recorded successfully!');
-
-      // Refresh the dashboard data
-      setRefreshTrigger(prev => prev + 1);
-
-    } catch (error) {
-      console.error('Error recording payment:', error);
-      alert('Error recording payment: ' + error.message);
-    }
-  };
-
-  const handleExpenseSubmit = async (expenseData) => {
-    try {
-      if (isDevelopmentMode()) {
-        console.log('Expense data (Demo mode):', expenseData);
-        alert('Expense recorded successfully! (Demo mode)');
-        return;
-      }
-
-      // Prepare payload for insert
-      const payload = {
-        amount: Number(expenseData.amount || 0),
-        category: expenseData.category,
-        description: expenseData.description,
-        expense_date: expenseData.expense_date,
-        notes: expenseData.notes || null,
-      };
-
-      // Keep explicit receipt_url if provided. Ignore receipt_file here to avoid unknown column errors.
-      if (expenseData.receipt_url) {
-        payload.receipt_url = expenseData.receipt_url;
-      }
-
-      const { error } = await supabase
-        .from('expenses')
-        .insert([payload]);
-
-      if (error) throw error;
-
-      alert('Expense recorded successfully!');
-
-      // Refresh the dashboard data
-      setRefreshTrigger(prev => prev + 1);
-
-    } catch (error) {
-      console.error('Error recording expense:', error);
-      alert('Error recording expense: ' + error.message);
-    }
-  };
-
   return (
     <Layout>
       <PageTransition className="space-y-6">
@@ -648,6 +542,7 @@ const HomePage = () => {
               change={`+${stats.monthlyGrowth}%`}
               changeType="positive"
               icon={Banknote}
+              onClick={() => navigate('/fund-collection')}
             />
           </StaggerItem>
           <StaggerItem>
@@ -657,6 +552,7 @@ const HomePage = () => {
               change={`${Number(stats.expenseRate.toFixed(2))}% quỹ đã dùng`}
               changeType="negative"
               icon={Receipt}
+              onClick={() => navigate('/expenses')}
             />
           </StaggerItem>
           <StaggerItem>
@@ -669,6 +565,7 @@ const HomePage = () => {
               change={stats.currentBalance >= 0 ? "Dương tính" : "Âm tính"}
               changeType={stats.currentBalance >= 0 ? "positive" : "negative"}
               icon={Target}
+              onClick={() => navigate('/bill-sharing')}
             />
           </StaggerItem>
           <StaggerItem>
@@ -678,6 +575,7 @@ const HomePage = () => {
               change={`${stats.paidThisMonth}/${stats.totalEmployees} nhân viên`}
               changeType={stats.collectionRate >= 80 ? "positive" : stats.collectionRate >= 60 ? "neutral" : "negative"}
               icon={Users}
+              onClick={() => navigate('/employees?status=fund')}
             />
           </StaggerItem>
         </StaggerContainer>

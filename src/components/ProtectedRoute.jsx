@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
+import { PageSkeleton } from './PageState';
 
 const ProtectedRoute = ({ children }) => {
   const location = useLocation();
@@ -71,7 +72,7 @@ const ProtectedRoute = ({ children }) => {
     };
   }, []);
 
-  if (!ready) return null;
+  if (!ready) return <div className="min-h-screen bg-gray-50 p-8"><PageSkeleton /></div>;
   if (!hasSession) return <Navigate to="/login" replace state={{ from: location }} />;
   if (!isAdmin) {
     return (

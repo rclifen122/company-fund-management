@@ -31,10 +31,10 @@ const ForgotPasswordPage = () => {
   return (
     <div className="flex justify-center items-center h-screen">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center">Forgot Password</h1>
+        <h1 className="text-2xl font-bold text-center">Quên Mật Khẩu</h1>
         {success ? (
           <p className="text-center text-green-600">
-            Please check your email to reset your password.
+            Vui lòng kiểm tra email để đặt lại mật khẩu.
           </p>
         ) : (
           <form onSubmit={handlePasswordReset} className="space-y-6">
@@ -60,7 +60,7 @@ const ForgotPasswordPage = () => {
               disabled={loading}
               className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              {loading ? 'Loading...' : 'Send Reset Link'}
+              {loading ? 'Đang gửi...' : 'Gửi liên kết đặt lại mật khẩu'}
             </button>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>

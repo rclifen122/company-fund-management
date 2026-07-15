@@ -341,7 +341,7 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                     }`}
                   >
                     <span className="flex items-center gap-2 text-sm font-semibold text-blue-800">
-                      <Receipt className="h-4 w-4" /> Direct
+                      <Receipt className="h-4 w-4" /> Thu trực tiếp
                     </span>
                     <span className="mt-1 block text-xs text-gray-500">Đóng theo từng chi phí được chia.</span>
                   </button>
@@ -369,7 +369,7 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                 {errors.monthly_contribution_amount && <p className="mt-1 text-xs text-red-600">{errors.monthly_contribution_amount}</p>}
                 {!formData.participates_in_fund && formData.status === 'active' && (
                   <p className="mt-1 text-xs text-blue-600">
-                    Direct hiện không bị thu hàng tháng; mức này chỉ dùng nếu chuyển lại sang Quỹ.
+                    Người thu trực tiếp không đóng hàng tháng; mức này chỉ dùng nếu chuyển lại sang Quỹ.
                   </p>
                 )}
               </div>

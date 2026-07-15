@@ -1,6 +1,7 @@
-import { motion } from 'framer-motion';
+import { createElement } from 'react';
+import { motion as Motion } from 'framer-motion';
 
-const StatCard = ({ title, value, change, changeType, icon: Icon, subValue }) => {
+const StatCard = ({ title, value, change, changeType, icon: Icon, subValue, onClick }) => {
   const isPositive = changeType === 'positive';
   const isNegative = changeType === 'negative';
 
@@ -13,15 +14,18 @@ const StatCard = ({ title, value, change, changeType, icon: Icon, subValue }) =>
   const iconBg = iconBgMap[changeType] || 'from-gray-400 to-gray-500';
 
   return (
-    <motion.div
+    <Motion.button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="bg-white dark:bg-gray-800/80 overflow-hidden rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card hover:shadow-card-hover transition-shadow duration-250 cursor-default"
+      className={`w-full overflow-hidden rounded-xl border border-gray-100 bg-white text-left shadow-card transition-shadow duration-250 dark:border-gray-700/50 dark:bg-gray-800/80 ${onClick ? 'cursor-pointer hover:shadow-card-hover focus:outline-none focus:ring-2 focus:ring-indigo-500' : 'cursor-default'}`}
     >
       <div className="p-5">
         <div className="flex items-center">
           <div className={`flex-shrink-0 w-10 h-10 bg-gradient-to-br ${iconBg} rounded-lg flex items-center justify-center shadow-sm`}>
-            <Icon className="h-5 w-5 text-white" />
+            {createElement(Icon, { className: 'h-5 w-5 text-white' })}
           </div>
           <div className="ml-4 w-0 flex-1">
             <dl>
@@ -47,7 +51,7 @@ const StatCard = ({ title, value, change, changeType, icon: Icon, subValue }) =>
           </div>
         </div>
       )}
-    </motion.div>
+    </Motion.button>
   );
 };
 

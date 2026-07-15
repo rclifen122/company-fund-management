@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion as Motion } from 'framer-motion';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -29,7 +29,7 @@ const staggerItem = {
  * Usage: <PageTransition>...content...</PageTransition>
  */
 const PageTransition = ({ children, className = '' }) => (
-  <motion.div
+  <Motion.div
     variants={pageVariants}
     initial="initial"
     animate="animate"
@@ -38,7 +38,7 @@ const PageTransition = ({ children, className = '' }) => (
     className={className}
   >
     {children}
-  </motion.div>
+  </Motion.div>
 );
 
 /**
@@ -46,23 +46,23 @@ const PageTransition = ({ children, className = '' }) => (
  * Usage: <StaggerContainer>...stagger items...</StaggerContainer>
  */
 const StaggerContainer = ({ children, className = '' }) => (
-  <motion.div
+  <Motion.div
     variants={staggerContainer}
     initial="initial"
     animate="animate"
     className={className}
   >
     {children}
-  </motion.div>
+  </Motion.div>
 );
 
 /**
  * Individual staggered item — must be a direct child of StaggerContainer.
  */
 const StaggerItem = ({ children, className = '' }) => (
-  <motion.div variants={staggerItem} className={className}>
+  <Motion.div variants={staggerItem} className={className}>
     {children}
-  </motion.div>
+  </Motion.div>
 );
 
 export { PageTransition, StaggerContainer, StaggerItem };

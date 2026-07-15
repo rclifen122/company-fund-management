@@ -1,13 +1,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      'react-router-dom': path.resolve(__dirname, 'node_modules/react-router-dom'),
+      'react-router-dom': path.resolve(currentDirectory, 'node_modules/react-router-dom'),
     },
   },
 })

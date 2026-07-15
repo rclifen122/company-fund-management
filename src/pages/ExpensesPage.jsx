@@ -4,17 +4,17 @@ import PageTransition from '../components/PageTransition';
 import ExpenseModal from '../components/ExpenseModal';
 import { supabase } from '../supabase';
 import { formatVND, formatDate } from '../utils/format';
-import { Plus, Receipt, Calendar, DollarSign, TrendingDown, Search, Filter, FileText, Edit, Trash2, Banknote } from 'lucide-react';
+import { Plus, Edit, Trash2 } from 'lucide-react';
+import { useFeedback } from '../contexts/feedback';
+import { ErrorState, PageSkeleton } from '../components/PageState';
 
 const ExpensesPage = () => {
+  const { showToast, confirmAction } = useFeedback();
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
   const [error, setError] = useState(null);
-  const [totalFundCollected, setTotalFundCollected] = useState(0);
 
   const fetchExpensesData = async () => {
     try {
@@ -44,7 +44,7 @@ const ExpensesPage = () => {
     Promise.all([fetchExpensesData()]).finally(() => setLoading(false));
 
     const channel = supabase.channel('expenses-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
         fetchExpensesData();
       })
       .subscribe();
@@ -104,19 +104,26 @@ const ExpensesPage = () => {
 
       setShowExpenseModal(false);
       setEditingExpense(null);
+      showToast(isEditing ? 'Đã cập nhật chi phí.' : 'Đã thêm chi phí.');
     } catch (err) {
-      alert('Error: ' + err.message);
+      showToast(`Không thể lưu chi phí: ${err.message}`, 'error');
     }
   };
 
   const handleDeleteExpense = async (expense) => {
     if (expense.sharing_status !== 'not_shared') {
-      alert('Delete the linked bill sharing record before deleting this expense.');
+      showToast('Hãy xoá lần chia tiền liên quan trước khi xoá chi phí này.', 'warning');
       return;
     }
-    if (!confirm('Are you sure?')) return;
+    const accepted = await confirmAction({
+      title: 'Xoá chi phí',
+      message: `Bạn có chắc muốn xoá “${expense.description}”? Thao tác này không thể hoàn tác.`,
+      confirmLabel: 'Xoá chi phí',
+    });
+    if (!accepted) return;
     const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
-    if (error) alert('Error deleting expense: ' + error.message);
+    if (error) showToast(`Không thể xoá chi phí: ${error.message}`, 'error');
+    else showToast('Đã xoá chi phí.');
   };
 
   const handleEditExpense = (expense) => {
@@ -124,11 +131,10 @@ const ExpensesPage = () => {
     setShowExpenseModal(true);
   };
 
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   const totalNetExpenses = expenses.reduce((sum, expense) => sum + expense.net_amount, 0);
 
-  if (loading) return <Layout><div>Loading...</div></Layout>;
-  if (error) return <Layout><div>Error: {error}</div></Layout>;
+  if (loading) return <Layout><PageSkeleton rows={6} /></Layout>;
+  if (error) return <Layout><ErrorState message={error} onRetry={fetchExpensesData} /></Layout>;
 
   return (
     <Layout>
@@ -145,7 +151,28 @@ const ExpensesPage = () => {
         </div>
 
         <div className="bg-white dark:bg-gray-800/80 rounded-xl border border-gray-100 dark:border-gray-700/50 shadow-card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="space-y-3 p-4 md:hidden">
+            {expenses.map((expense) => (
+              <article key={expense.id} className="rounded-xl border border-gray-200 p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{expense.description}</p>
+                    <p className="mt-1 text-xs text-gray-500">{formatDate(expense.expense_date)} · {expense.category}</p>
+                  </div>
+                  {getSharingStatusBadge(expense.sharing_status)}
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div><dt className="text-xs text-gray-500">Tổng tiền</dt><dd className="font-semibold text-gray-900">{formatVND(expense.amount)}</dd></div>
+                  <div><dt className="text-xs text-gray-500">Chi phí thực</dt><dd className="font-semibold text-red-600">{formatVND(expense.net_amount)}</dd></div>
+                </dl>
+                <div className="mt-4 flex justify-end gap-2 border-t border-gray-100 pt-3">
+                  <button onClick={() => handleEditExpense(expense)} className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-700"><Edit className="h-3.5 w-3.5" /> Chỉnh sửa</button>
+                  <button onClick={() => handleDeleteExpense(expense)} disabled={expense.sharing_status !== 'not_shared'} className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 disabled:border-gray-200 disabled:text-gray-400"><Trash2 className="h-3.5 w-3.5" /> Xoá</button>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50/80 dark:bg-gray-700/30">
                 <tr>
@@ -172,8 +199,8 @@ const ExpensesPage = () => {
                     <td className="px-6 py-4 whitespace-nowrap">{getSharingStatusBadge(expense.sharing_status)}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <button onClick={() => handleEditExpense(expense)} title={expense.sharing_status !== 'not_shared' ? 'Edit metadata; amount is locked by bill sharing' : 'Edit expense'} className="text-indigo-600 hover:text-indigo-900 p-1 rounded"><Edit className="h-4 w-4" /></button>
-                        <button onClick={() => handleDeleteExpense(expense)} disabled={expense.sharing_status !== 'not_shared'} title={expense.sharing_status !== 'not_shared' ? 'Delete the linked sharing first' : 'Delete expense'} className="text-red-600 hover:text-red-900 p-1 rounded disabled:text-gray-400 disabled:cursor-not-allowed"><Trash2 className="h-4 w-4" /></button>
+                        <button onClick={() => handleEditExpense(expense)} title={expense.sharing_status !== 'not_shared' ? 'Chỉnh thông tin; số tiền đã bị khoá do đã chia' : 'Chỉnh chi phí'} className="text-indigo-600 hover:text-indigo-900 p-1 rounded"><Edit className="h-4 w-4" /></button>
+                        <button onClick={() => handleDeleteExpense(expense)} disabled={expense.sharing_status !== 'not_shared'} title={expense.sharing_status !== 'not_shared' ? 'Hãy xoá lần chia tiền trước' : 'Xoá chi phí'} className="text-red-600 hover:text-red-900 p-1 rounded disabled:text-gray-400 disabled:cursor-not-allowed"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
                   </tr>

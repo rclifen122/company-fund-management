@@ -1,72 +1,44 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import LoginPage from './pages/LoginPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import UpdatePasswordPage from './pages/UpdatePasswordPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import HomePage from './pages/HomePage';
-import EmployeesPage from './pages/EmployeesPage';
-import FundCollectionPage from './pages/FundCollectionPage';
-import ExpensesPage from './pages/ExpensesPage';
-import SettingsPage from './pages/SettingsPage';
-import BillSharingPage from './pages/BillSharingPage';
+import { PageSkeleton } from './components/PageState';
+import { FeedbackProvider } from './contexts/FeedbackContext';
+
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const UpdatePasswordPage = lazy(() => import('./pages/UpdatePasswordPage'));
+const HomePage = lazy(() => import('./pages/HomePage'));
+const EmployeesPage = lazy(() => import('./pages/EmployeesPage'));
+const FundCollectionPage = lazy(() => import('./pages/FundCollectionPage'));
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const BillSharingPage = lazy(() => import('./pages/BillSharingPage'));
+const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
+
+const ProtectedPage = ({ children }) => (
+  <ProtectedRoute>{children}</ProtectedRoute>
+);
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/update-password" element={<UpdatePasswordPage />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <HomePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/employees"
-          element={
-            <ProtectedRoute>
-              <EmployeesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/fund-collection"
-          element={
-            <ProtectedRoute>
-              <FundCollectionPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/expenses"
-          element={
-            <ProtectedRoute>
-              <ExpensesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <SettingsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/bill-sharing"
-          element={
-            <ProtectedRoute>
-              <BillSharingPage />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
-    </Router>
+    <FeedbackProvider>
+      <Router>
+        <Suspense fallback={<div className="min-h-screen bg-gray-50 p-8"><PageSkeleton /></div>}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/update-password" element={<UpdatePasswordPage />} />
+            <Route path="/" element={<ProtectedPage><HomePage /></ProtectedPage>} />
+            <Route path="/employees" element={<ProtectedPage><EmployeesPage /></ProtectedPage>} />
+            <Route path="/fund-collection" element={<ProtectedPage><FundCollectionPage /></ProtectedPage>} />
+            <Route path="/expenses" element={<ProtectedPage><ExpensesPage /></ProtectedPage>} />
+            <Route path="/settings" element={<ProtectedPage><SettingsPage /></ProtectedPage>} />
+            <Route path="/bill-sharing" element={<ProtectedPage><BillSharingPage /></ProtectedPage>} />
+            <Route path="/audit-logs" element={<ProtectedPage><AuditLogPage /></ProtectedPage>} />
+          </Routes>
+        </Suspense>
+      </Router>
+    </FeedbackProvider>
   );
 }
 

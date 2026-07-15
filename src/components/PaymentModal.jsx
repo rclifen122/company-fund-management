@@ -132,7 +132,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              Nhập Quỹ - Record Payment
+              Ghi Nhận Thu Quỹ
             </h3>
             <button
               onClick={onClose}
@@ -149,7 +149,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <User className="h-4 w-4 mr-2" />
-                Nhân viên (Employee)
+                Nhân viên
               </label>
               <select
                 value={formData.employee_id}
@@ -173,7 +173,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className="h-4 w-4 mr-2" />
-                Số tiền (Amount)
+                Số tiền
               </label>
               <div className="relative">
                 <input
@@ -210,7 +210,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <Calendar className="h-4 w-4 mr-2" />
-                Ngày thanh toán (Payment Date)
+                Ngày thanh toán
               </label>
               <input
                 type="date"
@@ -228,7 +228,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <Calendar className="h-4 w-4 mr-2" />
-                Tháng đóng (Months Covered)
+                Tháng đóng quỹ
               </label>
               <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                 {monthOptions.map(month => (
@@ -253,7 +253,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <CreditCard className="h-4 w-4 mr-2" />
-                Phương thức thanh toán (Payment Method)
+                Phương thức thanh toán
               </label>
               <select
                 value={formData.payment_method}
@@ -261,9 +261,9 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 disabled={isSubmitting}
               >
-                <option value="cash">Tiền mặt (Cash)</option>
-                <option value="bank_transfer">Chuyển khoản (Bank Transfer)</option>
-                <option value="other">Khác (Other)</option>
+                <option value="cash">Tiền mặt</option>
+                <option value="bank_transfer">Chuyển khoản</option>
+                <option value="other">Khác</option>
               </select>
             </div>
 
@@ -271,7 +271,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <FileText className="h-4 w-4 mr-2" />
-                Ghi chú (Notes)
+                Ghi chú
               </label>
               <textarea
                 value={formData.notes}
@@ -298,14 +298,14 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
                 className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 disabled={isSubmitting}
               >
-                Hủy (Cancel)
+                Hủy
               </button>
               <button
                 type="submit"
                 className="flex-1 px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Đang lưu...' : 'Lưu (Save)'}
+                {isSubmitting ? 'Đang lưu...' : 'Lưu giao dịch'}
               </button>
             </div>
           </form>

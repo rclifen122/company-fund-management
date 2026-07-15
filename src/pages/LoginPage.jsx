@@ -57,7 +57,7 @@ const LoginPage = () => {
           {isDevelopmentMode() && (
             <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700/50 rounded-xl">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>Chế độ Demo:</strong> Nhấn đăng nhập với bất kỳ thông tin nào
+                <strong>Chế độ thử nghiệm:</strong> Nhấn đăng nhập với bất kỳ thông tin nào
               </p>
             </div>
           )}

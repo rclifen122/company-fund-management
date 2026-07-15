@@ -3,14 +3,20 @@ import Layout from '../components/Layout';
 import { supabase } from '../supabase';
 import { formatVND } from '../utils/format';
 import { Users, DollarSign, Cake, Check, X, BadgeCheck, Eye, Clipboard } from 'lucide-react';
+import { useFeedback } from '../contexts/feedback';
+import { ErrorState, PageSkeleton } from '../components/PageState';
 
 const BillSharingPage = () => {
+  const { showToast, confirmAction } = useFeedback();
   const [expenses, setExpenses] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [selectedExpenses, setSelectedExpenses] = useState(new Set());
   const [selectedEmployees, setSelectedEmployees] = useState(new Set());
   const [birthdayPeople, setBirthdayPeople] = useState(new Set());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [sharingHistory, setSharingHistory] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [amountPerPerson, setAmountPerPerson] = useState(0);
@@ -21,13 +27,8 @@ const BillSharingPage = () => {
   const [detailsSharing, setDetailsSharing] = useState(null);
   const [copyingId, setCopyingId] = useState(null);
   const [updatingParticipantId, setUpdatingParticipantId] = useState(null);
-  const [toast, setToast] = useState({ show: false, text: '', type: 'success' });
   const [participantTypeFilter, setParticipantTypeFilter] = useState('all'); // all | fund | direct
   const [birthdayTypeFilter, setBirthdayTypeFilter] = useState('all'); // all | fund | direct
-  const showToast = (text, type = 'success', duration = 2000) => {
-    setToast({ show: true, text, type });
-    setTimeout(() => setToast({ show: false, text: '', type }), duration);
-  };
 
   const fetchSharingHistory = async () => {
     const { data, error } = await supabase
@@ -38,8 +39,8 @@ const BillSharingPage = () => {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) console.error('Error fetching sharing history:', error);
-    else setSharingHistory(data || []);
+    if (error) throw error;
+    setSharingHistory(data || []);
   };
 
   const fetchAvailableExpenses = async () => {
@@ -49,23 +50,22 @@ const BillSharingPage = () => {
       .eq('sharing_status', 'not_shared')
       .order('expense_date', { ascending: false });
 
-    if (error) console.error('Error fetching expenses:', error);
-    else setExpenses(data || []);
+    if (error) throw error;
+    setExpenses(data || []);
   };
 
   useEffect(() => {
     const fetchData = async () => {
-      setLoading(true);
-      await fetchAvailableExpenses();
-
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('employees')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (employeesError) {
-        console.error('Error fetching employees:', employeesError);
-      } else {
+      setInitialLoading(true);
+      setLoadError(null);
+      try {
+        const [_, employeesResponse] = await Promise.all([
+          fetchAvailableExpenses(),
+          supabase.from('employees').select('*').order('name', { ascending: true }),
+          fetchSharingHistory(),
+        ]);
+        if (employeesResponse.error) throw employeesResponse.error;
+        const employeesData = employeesResponse.data;
         const normalizedEmployees = (employeesData || []).map(emp => ({
           ...emp,
           participates_in_fund: emp.participates_in_fund === true
@@ -75,12 +75,15 @@ const BillSharingPage = () => {
           .filter(e => e.status === 'active' && !e.leave_date)
           .map(e => e.id);
         setSelectedEmployees(new Set(defaultSelected));
+      } catch (error) {
+        console.error('Không thể tải dữ liệu chia chi phí:', error);
+        setLoadError(error.message || 'Đã xảy ra lỗi không xác định.');
+      } finally {
+        setInitialLoading(false);
       }
-      fetchSharingHistory();
-      setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [reloadKey]);
 
   const handleExpenseToggle = (expenseId) => {
     const newSelection = new Set(selectedExpenses);
@@ -132,7 +135,7 @@ const BillSharingPage = () => {
 
   const handleCreateSharing = async () => {
     if (selectedEmployees.size === 1 && birthdayPeople.size === 1) {
-      showToast('A birthday sharing requires at least one other participant', 'error', 3000);
+      showToast('Khoản sinh nhật cần có ít nhất một người tham gia khác.', 'error');
       return;
     }
 
@@ -145,13 +148,13 @@ const BillSharingPage = () => {
       });
       if (error) throw error;
 
-      showToast('Sharing created successfully', 'success');
+      showToast('Đã tạo lần chia tiền.');
       setSelectedExpenses(new Set());
       await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
 
     } catch (error) {
       console.error('Error creating sharing record:', error);
-      showToast('Failed to create sharing. Please try again.', 'error', 3000);
+      showToast('Không thể tạo lần chia tiền. Vui lòng thử lại.', 'error');
     } finally {
       setLoading(false);
     }
@@ -167,30 +170,34 @@ const BillSharingPage = () => {
         payment_status_input: newStatus,
       });
       if (error) throw error;
-      showToast(newStatus === 'paid' ? 'Marked as Paid' : 'Marked as Pending', 'success');
+      showToast(newStatus === 'paid' ? 'Đã đánh dấu đã thanh toán.' : 'Đã chuyển về chờ thanh toán.');
       await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
     } catch (error) {
       console.error('Error updating payment status:', error);
-      showToast('Failed to update payment status', 'error', 2500);
+      showToast('Không thể cập nhật trạng thái thanh toán.', 'error');
     } finally {
       setUpdatingParticipantId(null);
     }
   };
 
   const handleDeleteSharing = async (sharingId, status) => {
-    const msg = status === 'finalized'
-      ? 'This will rollback reimbursements applied by this sharing and delete it. Continue?'
-      : 'Delete this sharing record? This will remove its participants and links.';
-    if (!confirm(msg)) return;
+    const accepted = await confirmAction({
+      title: 'Xoá lần chia tiền',
+      message: status === 'finalized'
+        ? 'Hệ thống sẽ hoàn tác các khoản hoàn trả đã áp dụng rồi xoá lần chia này. Bạn có muốn tiếp tục?'
+        : 'Người tham gia và các liên kết chi phí của lần chia này cũng sẽ bị xoá.',
+      confirmLabel: 'Xoá lần chia',
+    });
+    if (!accepted) return;
     setLoading(true);
     try {
       const { error } = await supabase.rpc('delete_bill_sharing', { sharing_id_input: sharingId });
       if (error) throw error;
       await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
-      showToast('Sharing deleted successfully', 'success');
+      showToast('Đã xoá lần chia tiền.');
     } catch (err) {
       console.error('Error deleting sharing record:', err);
-      showToast('Failed to delete sharing. Please try again.', 'error', 3000);
+      showToast('Không thể xoá lần chia tiền. Vui lòng thử lại.', 'error');
     } finally {
       setLoading(false);
     }
@@ -222,41 +229,42 @@ const BillSharingPage = () => {
         })
         .filter(Boolean);
 
-      const header = `Bill Sharing on ${new Date(sharing.sharing_date).toLocaleDateString('vi-VN')} | Total: ${formatVND(Number(sharing.total_amount || 0))}`;
+      const header = `Chia chi phí ngày ${new Date(sharing.sharing_date).toLocaleDateString('vi-VN')} | Tổng: ${formatVND(Number(sharing.total_amount || 0))}`;
       const text = [header, ...items].join('\n');
 
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        setToast({ show: true, text: 'Copied expenses to clipboard', type: 'success' });
-        setTimeout(() => setToast({ show: false, text: '', type: 'success' }), 2000);
+        showToast('Đã sao chép danh sách chi phí.');
       } else {
-        // Fallback: open a prompt for manual copy
-        window.prompt('Copy the text below:', text);
+        showToast('Trình duyệt không hỗ trợ sao chép tự động.', 'warning');
       }
     } catch (err) {
       console.error('Copy failed:', err);
-      setToast({ show: true, text: 'Copy failed. Please try again.', type: 'error' });
-      setTimeout(() => setToast({ show: false, text: '', type: 'error' }), 2500);
+      showToast('Sao chép thất bại. Vui lòng thử lại.', 'error');
     } finally {
       setCopyingId(null);
     }
   };
 
   const handleFinalizeSharing = async (sharingId) => {
-    if (!confirm('Are you sure you want to finalize this sharing event? This will update the original expenses and cannot be undone.')) {
-      return;
-    }
+    const accepted = await confirmAction({
+      title: 'Hoàn tất lần chia tiền',
+      message: 'Chi phí gốc sẽ được cập nhật và thao tác này không thể hoàn tác trực tiếp.',
+      confirmLabel: 'Hoàn tất',
+      tone: 'primary',
+    });
+    if (!accepted) return;
     setLoading(true);
     try {
       const { error } = await supabase.rpc('finalize_bill_sharing', {
         sharing_id_input: sharingId
       });
       if (error) throw error;
-      showToast('Sharing finalized and expenses updated', 'success');
+      showToast('Đã hoàn tất chia tiền và cập nhật chi phí.');
       fetchSharingHistory();
     } catch (error) {
       console.error('Error finalizing sharing event:', error);
-      showToast('Failed to finalize. Please try again.', 'error', 3000);
+      showToast('Không thể hoàn tất lần chia. Vui lòng thử lại.', 'error');
     } finally {
       setLoading(false);
     }
@@ -324,18 +332,21 @@ const BillSharingPage = () => {
 
   const invalidSingleBirthday = selectedEmployees.size === 1 && birthdayPeople.size === 1;
 
+  if (initialLoading) return <Layout><PageSkeleton rows={7} /></Layout>;
+  if (loadError) return <Layout><ErrorState title="Không thể tải dữ liệu chia chi phí" message={loadError} onRetry={() => setReloadKey((value) => value + 1)} /></Layout>;
+
 
   return (
     <Layout>
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Bill Sharing Calculator</h1>
-          <p className="mt-1 text-sm text-gray-500">Calculate and track shared expenses for events like birthday parties.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Chia Chi Phí</h1>
+          <p className="mt-1 text-sm text-gray-500">Tính và theo dõi phần chi phí của từng người trong các hoạt động chung.</p>
         </div>
         <div className="flex flex-col lg:flex-row lg:space-x-8">
           <div className="flex-1 space-y-8">
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">1. Select Expenses to Share</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-4">1. Chọn khoản chi cần chia</h2>
               <div className="space-y-3 max-h-60 overflow-y-auto">
                 {expenses.map(expense => (
                   <div key={expense.id} className={`flex items-center justify-between p-3 rounded-md border ${selectedExpenses.has(expense.id) ? 'bg-indigo-50 border-indigo-300' : 'bg-gray-50'}`}>
@@ -352,34 +363,34 @@ const BillSharingPage = () => {
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-2">2. Select Participants</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">2. Chọn người tham gia</h2>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-gray-600">Show:</span>
+                  <span className="text-gray-600">Hiển thị:</span>
                   <select
                     value={participantTypeFilter}
                     onChange={(e) => setParticipantTypeFilter(e.target.value)}
                     className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   >
-                    <option value="all">All</option>
-                    <option value="fund">Fund</option>
-                    <option value="direct">Direct</option>
+                    <option value="all">Tất cả</option>
+                    <option value="fund">Đóng quỹ</option>
+                    <option value="direct">Thu trực tiếp</option>
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => bulkSelectParticipants('select')}
                     className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                    title="Select all shown"
+                    title="Chọn tất cả người đang hiển thị"
                   >
-                    Select shown
+                    Chọn tất cả
                   </button>
                   <button
                     onClick={() => bulkSelectParticipants('clear')}
                     className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                    title="Clear all shown"
+                    title="Bỏ chọn tất cả người đang hiển thị"
                   >
-                    Clear shown
+                    Bỏ chọn
                   </button>
                 </div>
               </div>
@@ -394,7 +405,7 @@ const BillSharingPage = () => {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-gray-800">{emp.name}</p>
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                            {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                            {emp.participates_in_fund ? 'Đóng quỹ' : 'Thu trực tiếp'}
                           </span>
                         </div>
                       </label>
@@ -403,34 +414,34 @@ const BillSharingPage = () => {
               </div>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-2">3. Select Birthday People</h2>
+              <h2 className="text-lg font-semibold text-gray-800 mb-2">3. Chọn người được miễn phần chi</h2>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2 text-sm">
-                  <span className="text-gray-600">Show:</span>
+                  <span className="text-gray-600">Hiển thị:</span>
                   <select
                     value={birthdayTypeFilter}
                     onChange={(e) => setBirthdayTypeFilter(e.target.value)}
                     className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   >
-                    <option value="all">All</option>
-                    <option value="fund">Fund</option>
-                    <option value="direct">Direct</option>
+                    <option value="all">Tất cả</option>
+                    <option value="fund">Đóng quỹ</option>
+                    <option value="direct">Thu trực tiếp</option>
                   </select>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => bulkMarkBirthday('mark')}
                     className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                    title="Mark all shown as birthday"
+                    title="Miễn phần chi cho tất cả người đang hiển thị"
                   >
-                    Mark shown
+                    Miễn tất cả
                   </button>
                   <button
                     onClick={() => bulkMarkBirthday('unmark')}
                     className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
-                    title="Unmark all shown"
+                    title="Bỏ miễn phần chi cho tất cả người đang hiển thị"
                   >
-                    Unmark shown
+                    Bỏ miễn
                   </button>
                 </div>
               </div>
@@ -446,7 +457,7 @@ const BillSharingPage = () => {
                         <div className="flex items-center gap-2">
                           <p className="font-medium text-gray-800">{emp.name}</p>
                           <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${emp.participates_in_fund ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                            {emp.participates_in_fund ? 'Fund' : 'Direct'}
+                            {emp.participates_in_fund ? 'Đóng quỹ' : 'Thu trực tiếp'}
                           </span>
                         </div>
                       </label>
@@ -458,27 +469,27 @@ const BillSharingPage = () => {
           <div className="w-full lg:w-96 mt-8 lg:mt-0">
             <div className="sticky top-6 space-y-6">
               <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Real-time Calculation</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Tạm tính</h3>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center"><p>Total Selected Amount:</p><p className="font-bold text-xl text-indigo-600">{formatVND(totalAmount)}</p></div>
-                  <div className="flex justify-between items-center"><p>Amount Per Person:</p><p className="font-bold text-xl text-indigo-600">{formatVND(amountPerPerson)}</p></div>
+                  <div className="flex justify-between items-center"><p>Tổng chi phí đã chọn:</p><p className="font-bold text-xl text-indigo-600">{formatVND(totalAmount)}</p></div>
+                  <div className="flex justify-between items-center"><p>Bình quân mỗi người:</p><p className="font-bold text-xl text-indigo-600">{formatVND(amountPerPerson)}</p></div>
                   <hr />
-                  <div className="flex justify-between items-center"><p className="text-blue-600 font-semibold">To Be Paid by Fund:</p><p className="font-bold text-blue-600">{formatVND(fundPayment)}</p></div>
-                  <div className="flex justify-between items-center"><p className="text-green-600 font-semibold">To Be Paid Directly:</p><p className="font-bold text-green-600">{formatVND(directPayment)}</p></div>
+                  <div className="flex justify-between items-center"><p className="text-blue-600 font-semibold">Quỹ thanh toán:</p><p className="font-bold text-blue-600">{formatVND(fundPayment)}</p></div>
+                  <div className="flex justify-between items-center"><p className="text-green-600 font-semibold">Thu trực tiếp:</p><p className="font-bold text-green-600">{formatVND(directPayment)}</p></div>
                 </div>
                 {invalidSingleBirthday && (
-                  <p className="mt-4 text-sm text-red-600">A birthday sharing requires at least one other participant.</p>
+                  <p className="mt-4 text-sm text-red-600">Cần có ít nhất một người khác cùng tham gia khoản chi này.</p>
                 )}
-                <button onClick={handleCreateSharing} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400" disabled={loading || selectedExpenses.size === 0 || selectedEmployees.size === 0 || invalidSingleBirthday}>{loading ? 'Creating...' : 'Create Sharing Record'}</button>
+                <button onClick={handleCreateSharing} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-400" disabled={loading || selectedExpenses.size === 0 || selectedEmployees.size === 0 || invalidSingleBirthday}>{loading ? 'Đang tạo...' : 'Tạo phiếu chia chi phí'}</button>
               </div>
               <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Payment Breakdown</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Chi tiết thanh toán</h3>
                 <div className="space-y-3 max-h-48 overflow-y-auto">
                   {paymentBreakdown.map(p => (
                     <div key={p.id} className="flex justify-between items-center text-sm">
                       <div>
                         <p className="font-medium text-gray-800">{p.name}</p>
-                        <p className={`text-xs font-semibold ${p.paymentMethod === 'fund' ? 'text-blue-600' : 'text-green-600'}`}>{p.paymentMethod === 'fund' ? 'Pay from Fund' : 'Pay Directly'}</p>
+                        <p className={`text-xs font-semibold ${p.paymentMethod === 'fund' ? 'text-blue-600' : 'text-green-600'}`}>{p.paymentMethod === 'fund' ? 'Thanh toán từ quỹ' : 'Thu trực tiếp'}</p>
                       </div>
                       <p className="font-bold text-gray-900">{formatVND(p.amountOwed)}</p>
                     </div>
@@ -489,7 +500,7 @@ const BillSharingPage = () => {
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow mt-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Sharing History</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Lịch sử chia chi phí</h2>
           <div className="space-y-4">
             {sharingHistory.map(sharing => {
               const participants = sharing.bill_sharing_participants || [];
@@ -522,7 +533,7 @@ const BillSharingPage = () => {
                               return parts.join(' — ');
                             })
                             .filter(Boolean);
-                          if (items.length === 0) return 'Shared Expenses';
+                          if (items.length === 0) return 'Các khoản chi đã chia';
                           const isExpanded = expandedSharings.has(sharing.id);
                           if (isExpanded) {
                             return (
@@ -536,7 +547,7 @@ const BillSharingPage = () => {
                                   className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 underline"
                                   onClick={() => toggleSharingExpand(sharing.id)}
                                 >
-                                  Hide
+                                  Thu gọn
                                 </button>
                               </div>
                             );
@@ -552,7 +563,7 @@ const BillSharingPage = () => {
                                   className="ml-2 text-xs text-indigo-600 hover:text-indigo-800 underline"
                                   onClick={() => toggleSharingExpand(sharing.id)}
                                 >
-                                  Show all (+{moreCount})
+                                  Xem tất cả (+{moreCount})
                                 </button>
                               )}
                             </span>
@@ -563,19 +574,19 @@ const BillSharingPage = () => {
                       <p className="text-sm text-gray-500">{new Date(sharing.sharing_date).toLocaleDateString('vi-VN')}</p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                          Fund Paid: {formatVND(fundCovered)}
+                          Quỹ đã trả: {formatVND(fundCovered)}
                         </span>
                         <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                          Direct Collected: {formatVND(directCollected)}
+                          Đã thu trực tiếp: {formatVND(directCollected)}
                         </span>
                         <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-800">
-                          Direct Outstanding: {formatVND(directOutstanding)}
+                          Chưa thu trực tiếp: {formatVND(directOutstanding)}
                         </span>
                       </div>
                       {directTotalOwed > 0 && (
                         <div className="mt-2">
                           <div className="flex justify-between text-xs text-gray-600 mb-1">
-                            <span>Direct Collection</span>
+                            <span>Tiến độ thu trực tiếp</span>
                             <span>{Math.round(Math.min(100, Math.max(0, directProgress)))}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
@@ -593,29 +604,29 @@ const BillSharingPage = () => {
                         className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
                       >
                         <Eye className="h-4 w-4 mr-2" />
-                        View details
+                        Xem chi tiết
                       </button>
                       <button
                         onClick={() => copySharingExpenses(sharing)}
                         className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
                         disabled={copyingId === sharing.id}
-                        title="Copy expenses to clipboard"
+                        title="Sao chép danh sách chi phí"
                       >
                         <Clipboard className="h-4 w-4 mr-2" />
-                        {copyingId === sharing.id ? 'Copying…' : 'Copy expenses'}
+                        {copyingId === sharing.id ? 'Đang sao chép…' : 'Sao chép'}
                       </button>
-                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status || 'pending'}</span>
+                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${sharing.status === 'finalized' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{sharing.status === 'finalized' ? 'Đã hoàn tất' : 'Đang xử lý'}</span>
                       <button onClick={() => handleFinalizeSharing(sharing.id)} disabled={sharing.status === 'finalized' || !canFinalize || loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
                         <BadgeCheck className="h-4 w-4 mr-2" />
-                        {sharing.status === 'finalized' ? 'Finalized' : canFinalize ? 'Finalize & Update' : 'Waiting for Payments'}
+                        {sharing.status === 'finalized' ? 'Đã hoàn tất' : canFinalize ? 'Hoàn tất và cập nhật' : 'Chờ thanh toán'}
                       </button>
                       <button onClick={() => handleDeleteSharing(sharing.id, sharing.status)} disabled={loading} className="inline-flex items-center px-3 py-1 text-sm font-semibold rounded-full bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                        Delete
+                        Xoá
                       </button>
                     </div>
                   </div>
                   <div className="mt-4">
-                    <h4 className="font-semibold mb-2">Participants</h4>
+                    <h4 className="font-semibold mb-2">Người tham gia</h4>
                     <div className="space-y-2">
                       {sharing.bill_sharing_participants.map(p => (
                         <div key={p.id} className="flex justify-between items-center">
@@ -623,17 +634,17 @@ const BillSharingPage = () => {
                             <div className="flex items-center gap-2">
                               <p>{p.employees.name}</p>
                               <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                                {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
+                                {p.payment_method === 'fund' ? 'Đóng quỹ' : 'Thu trực tiếp'}
                               </span>
                             </div>
-                            <p className="text-sm text-gray-600">Owed: {formatVND(p.amount_owed)}</p>
+                            <p className="text-sm text-gray-600">Cần thanh toán: {formatVND(p.amount_owed)}</p>
                           </div>
                           <button
                             onClick={() => handlePaymentStatusToggle(p.id, p.payment_status, sharing.status)}
                             disabled={sharing.status === 'finalized' || updatingParticipantId === p.id}
                             className={`px-3 py-1 text-sm rounded-full disabled:cursor-not-allowed disabled:opacity-60 ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}
                           >
-                            {updatingParticipantId === p.id ? 'Updating…' : p.payment_status === 'paid' ? 'Paid' : 'Mark as Paid'}
+                            {updatingParticipantId === p.id ? 'Đang cập nhật…' : p.payment_status === 'paid' ? 'Đã thanh toán' : 'Đánh dấu đã trả'}
                           </button>
                         </div>
                       ))}
@@ -673,15 +684,15 @@ const BillSharingPage = () => {
               <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[85vh] overflow-hidden">
                 <div className="flex items-center justify-between px-6 py-4 border-b">
                   <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Sharing Details</h3>
-                    <p className="text-sm text-gray-600">Date: {new Date(detailsSharing.sharing_date).toLocaleDateString('vi-VN')} • Total: {formatVND(totalAmount)}</p>
+                    <h3 className="text-lg font-semibold text-gray-900">Chi tiết chia chi phí</h3>
+                    <p className="text-sm text-gray-600">Ngày: {new Date(detailsSharing.sharing_date).toLocaleDateString('vi-VN')} • Tổng: {formatVND(totalAmount)}</p>
                   </div>
                   <button onClick={() => setDetailsSharing(null)} className="text-gray-500 hover:text-gray-700"><X className="h-5 w-5" /></button>
                 </div>
 
                 <div className="p-6 space-y-6 overflow-y-auto">
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Linked Expenses</h4>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Khoản chi liên quan</h4>
                     <div className="overflow-x-auto border rounded">
                       <table className="min-w-full">
                         <thead className="bg-gray-50">
@@ -701,38 +712,38 @@ const BillSharingPage = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-gray-50 rounded p-4">
-                      <p className="text-sm text-gray-600">Fund Paid</p>
+                      <p className="text-sm text-gray-600">Quỹ đã thanh toán</p>
                       <p className="text-lg font-bold text-gray-900">{formatVND(fundCovered)}</p>
                     </div>
                     <div className="bg-gray-50 rounded p-4">
-                      <p className="text-sm text-gray-600">Direct Owed</p>
+                      <p className="text-sm text-gray-600">Cần thu trực tiếp</p>
                       <p className="text-lg font-bold text-gray-900">{formatVND(directTotalOwed)}</p>
                     </div>
                     <div className="bg-gray-50 rounded p-4">
-                      <p className="text-sm text-gray-600">Direct Collected</p>
+                      <p className="text-sm text-gray-600">Đã thu trực tiếp</p>
                       <p className="text-lg font-bold text-green-700">{formatVND(directCollected)}</p>
                     </div>
                     <div className="bg-gray-50 rounded p-4">
-                      <p className="text-sm text-gray-600">Direct Outstanding</p>
+                      <p className="text-sm text-gray-600">Chưa thu trực tiếp</p>
                       <p className="text-lg font-bold text-orange-700">{formatVND(directOutstanding)}</p>
                     </div>
                   </div>
 
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Participants</h4>
+                    <h4 className="text-sm font-semibold text-gray-800 mb-2">Người tham gia</h4>
                     <div className="space-y-2">
                       {participants.map(p => (
                         <div key={p.id} className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-800">{p.employees?.name || 'Unknown'}</span>
+                            <span className="text-sm text-gray-800">{p.employees?.name || 'Không rõ'}</span>
                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_method === 'fund' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
-                              {p.payment_method === 'fund' ? 'Fund' : 'Direct'}
+                              {p.payment_method === 'fund' ? 'Đóng quỹ' : 'Thu trực tiếp'}
                             </span>
                           </div>
                           <div className="text-sm">
                             <span className="font-medium mr-3">{formatVND(Number(p.amount_owed || 0))}</span>
                             <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${p.payment_status === 'paid' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
-                              {p.payment_status === 'paid' ? 'Paid' : 'Pending'}
+                              {p.payment_status === 'paid' ? 'Đã thanh toán' : 'Chờ thanh toán'}
                             </span>
                           </div>
                         </div>
@@ -742,18 +753,13 @@ const BillSharingPage = () => {
                 </div>
 
                 <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
-                  <button onClick={() => setDetailsSharing(null)} className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Close</button>
+                  <button onClick={() => setDetailsSharing(null)} className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Đóng</button>
                 </div>
               </div>
             </div>
           </div>
         );
       })()}
-      {toast.show && (
-        <div className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded shadow text-sm ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-          {toast.text}
-        </div>
-      )}
     </Layout>
   );
 };

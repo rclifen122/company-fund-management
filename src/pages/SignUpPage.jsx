@@ -33,22 +33,22 @@ const SignUpPage = () => {
   return (
     <div className="flex justify-center items-center h-screen">
       <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-        <h1 className="text-2xl font-bold text-center">Sign Up</h1>
+        <h1 className="text-2xl font-bold text-center">Tạo Tài Khoản</h1>
         {success ? (
           <div className="text-center space-y-3">
-            <p className="text-green-600 font-medium">Account created successfully!</p>
+            <p className="text-green-600 font-medium">Đã tạo tài khoản thành công!</p>
             <div className="text-sm text-gray-600 space-y-2">
-              <p>If email confirmation is enabled:</p>
+              <p>Nếu hệ thống yêu cầu xác nhận email:</p>
               <ul className="list-disc list-inside text-left space-y-1">
-                <li>Check your email inbox (including spam folder)</li>
-                <li>Click the verification link in the email</li>
+                <li>Kiểm tra hộp thư đến, bao gồm cả thư rác</li>
+                <li>Nhấn liên kết xác nhận trong email</li>
               </ul>
-              <p className="mt-3">If email confirmation is disabled, you can login immediately:</p>
+              <p className="mt-3">Nếu không yêu cầu xác nhận, bạn có thể đăng nhập ngay:</p>
               <a 
                 href="/login" 
                 className="inline-block mt-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
               >
-                Try Login Now
+                Đăng nhập ngay
               </a>
             </div>
           </div>
@@ -93,7 +93,7 @@ const SignUpPage = () => {
               disabled={loading}
               className="w-full px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              {loading ? 'Loading...' : 'Sign Up'}
+              {loading ? 'Đang tạo...' : 'Tạo tài khoản'}
             </button>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>

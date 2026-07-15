@@ -14,10 +14,10 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const categories = [
-    { value: 'events', label: 'Sự kiện (Events)', icon: '🎉' },
-    { value: 'gifts', label: 'Quà tặng (Gifts)', icon: '🎁' },
-    { value: 'office_supplies', label: 'Văn phòng phẩm (Office Supplies)', icon: '📝' },
-    { value: 'other', label: 'Khác (Other)', icon: '📦' }
+    { value: 'events', label: 'Sự kiện', icon: '🎉' },
+    { value: 'gifts', label: 'Quà tặng', icon: '🎁' },
+    { value: 'office_supplies', label: 'Văn phòng phẩm', icon: '📝' },
+    { value: 'other', label: 'Khác', icon: '📦' }
   ];
 
   // Reset form when modal opens or populate for editing
@@ -64,14 +64,14 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
     if (file) {
       // Check file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        setErrors(prev => ({ ...prev, receipt_file: 'File size must be less than 5MB' }));
+        setErrors(prev => ({ ...prev, receipt_file: 'Tệp tải lên phải nhỏ hơn 5 MB' }));
         return;
       }
       
       // Check file type (images and PDFs)
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf'];
       if (!allowedTypes.includes(file.type)) {
-        setErrors(prev => ({ ...prev, receipt_file: 'Only images (JPEG, PNG, GIF) and PDF files are allowed' }));
+        setErrors(prev => ({ ...prev, receipt_file: 'Chỉ chấp nhận ảnh JPEG, PNG, GIF hoặc tệp PDF' }));
         return;
       }
 
@@ -142,7 +142,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h3 className="text-lg font-medium text-gray-900">
-              {isEditing ? 'Chỉnh Sửa Chi Phí - Edit Expense' : 'Nhập Chi Phí - Record Expense'}
+              {isEditing ? 'Chỉnh Sửa Chi Phí' : 'Ghi Nhận Chi Phí'}
             </h3>
             <button
               onClick={onClose}
@@ -159,7 +159,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <Tag className="h-4 w-4 mr-2" />
-                Danh mục (Category)
+                Danh mục
               </label>
               <select
                 value={formData.category}
@@ -179,7 +179,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <FileText className="h-4 w-4 mr-2" />
-                Mô tả chi phí (Description) *
+                Mô tả chi phí *
               </label>
               <input
                 type="text"
@@ -198,7 +198,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className="h-4 w-4 mr-2" />
-                Số tiền (Amount) *
+                Số tiền *
               </label>
               <div className="relative">
                 <input
@@ -217,7 +217,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
                 <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
               )}
               {lockAmount && (
-                <p className="mt-1 text-sm text-gray-500">Amount is locked while this expense is linked to bill sharing.</p>
+                <p className="mt-1 text-sm text-gray-500">Số tiền đã bị khoá vì khoản chi này đang được liên kết với một lần chia chi phí.</p>
               )}
             </div>
 
@@ -225,7 +225,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <Calendar className="h-4 w-4 mr-2" />
-                Ngày chi phí (Expense Date) *
+                Ngày chi phí *
               </label>
               <input
                 type="date"
@@ -243,7 +243,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <Receipt className="h-4 w-4 mr-2" />
-                Hóa đơn/Biên lai (Receipt)
+                Hóa đơn/Biên lai
               </label>
               <div className="border-2 border-dashed border-gray-300 rounded-md p-4">
                 <div className="text-center">
@@ -282,7 +282,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
             <div>
               <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <FileText className="h-4 w-4 mr-2" />
-                Ghi chú thêm (Additional Notes)
+                Ghi chú thêm
               </label>
               <textarea
                 value={formData.notes}
@@ -330,7 +330,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
                 className="flex-1 px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 disabled={isSubmitting}
               >
-                Hủy (Cancel)
+                Hủy
               </button>
               <button
                 type="submit"

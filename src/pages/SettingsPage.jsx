@@ -1,295 +1,158 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Building, LockKeyhole, Mail, Phone, Save, Shield, User } from 'lucide-react';
 import Layout from '../components/Layout';
-import { User, Bell, Shield, CreditCard, Database } from 'lucide-react';
+import PageTransition from '../components/PageTransition';
+import { ErrorState, PageSkeleton } from '../components/PageState';
+import { useFeedback } from '../contexts/feedback';
+import { supabase } from '../supabase';
+import { isDevelopmentMode } from '../utils/env';
+
+const EMPTY_PROFILE = {
+  fullName: '',
+  email: '',
+  phone: '',
+  department: '',
+  role: '',
+};
 
 const SettingsPage = () => {
-  const [activeTab, setActiveTab] = useState('profile');
-  const [profile, setProfile] = useState({
-    fullName: 'John Doe',
-    email: 'john.doe@company.com',
-    phone: '+1 (555) 123-4567',
-    company: 'Investment Corp',
-    role: 'Fund Manager'
-  });
+  const navigate = useNavigate();
+  const { showToast } = useFeedback();
+  const [profile, setProfile] = useState(EMPTY_PROFILE);
+  const [originalEmail, setOriginalEmail] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
 
-  const [notifications, setNotifications] = useState({
-    emailReports: true,
-    transactionAlerts: true,
-    performanceUpdates: false,
-    systemMaintenance: true
-  });
+  const fetchProfile = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      if (isDevelopmentMode()) {
+        setProfile({ ...EMPTY_PROFILE, fullName: 'Quản trị viên', email: 'admin@company.local', role: 'Quản trị viên' });
+        setOriginalEmail('admin@company.local');
+        return;
+      }
 
-  const tabs = [
-    { id: 'profile', name: 'Profile', icon: User },
-    { id: 'notifications', name: 'Notifications', icon: Bell },
-    { id: 'security', name: 'Security', icon: Shield },
-    { id: 'billing', name: 'Billing', icon: CreditCard },
-    { id: 'system', name: 'System', icon: Database },
-  ];
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData?.user) throw userError || new Error('Không tìm thấy tài khoản đăng nhập.');
+      const user = userData.user;
 
-  const handleProfileUpdate = (e) => {
-    e.preventDefault();
-    // Handle profile update
-    alert('Profile updated successfully!');
-  };
+      const [profileResponse, employeeResponse] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        user.email
+          ? supabase.from('employees').select('name, email, phone, department').ilike('email', user.email).maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+      ]);
 
-  const handleNotificationChange = (key) => {
-    setNotifications(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+      const serverProfile = profileResponse.error ? null : profileResponse.data;
+      const employee = employeeResponse.error ? null : employeeResponse.data;
+      const email = user.email || serverProfile?.email || employee?.email || '';
+      setOriginalEmail(email);
+      setProfile({
+        fullName: user.user_metadata?.full_name || user.user_metadata?.name || serverProfile?.full_name || serverProfile?.name || employee?.name || '',
+        email,
+        phone: employee?.phone || serverProfile?.phone || '',
+        department: employee?.department || serverProfile?.department || '',
+        role: serverProfile?.role === 'admin' ? 'Quản trị viên' : serverProfile?.role || '',
+      });
+    } catch (fetchError) {
+      setError(fetchError.message || 'Không thể tải hồ sơ.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      if (!profile.fullName.trim()) throw new Error('Vui lòng nhập họ và tên.');
+      if (!profile.email.trim()) throw new Error('Vui lòng nhập email.');
+
+      if (!isDevelopmentMode()) {
+        const updatePayload = { data: { full_name: profile.fullName.trim() } };
+        if (profile.email.trim() !== originalEmail) updatePayload.email = profile.email.trim();
+        const { error: updateError } = await supabase.auth.updateUser(updatePayload);
+        if (updateError) throw updateError;
+      }
+
+      setOriginalEmail(profile.email.trim());
+      showToast(profile.email.trim() !== originalEmail
+        ? 'Đã lưu hồ sơ. Hãy kiểm tra email để xác nhận địa chỉ đăng nhập mới.'
+        : 'Đã lưu hồ sơ.');
+    } catch (saveError) {
+      showToast(`Không thể lưu hồ sơ: ${saveError.message}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Layout>
-      <div className="space-y-6">
-        {/* Header */}
+      <PageTransition className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your account settings and preferences
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Hồ Sơ Tài Khoản</h1>
+          <p className="mt-1 text-sm text-gray-500">Thông tin được lấy trực tiếp từ tài khoản đăng nhập và hồ sơ nhân viên trên máy chủ.</p>
         </div>
 
-        <div className="flex flex-col lg:flex-row lg:space-x-8 space-y-6 lg:space-y-0">
-          {/* Sidebar */}
-          <div className="lg:w-64">
-            <nav className="space-y-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                    activeTab === tab.id
-                      ? 'bg-indigo-100 text-indigo-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                >
-                  <tab.icon className="mr-3 h-5 w-5" />
-                  {tab.name}
+        {loading ? <PageSkeleton rows={4} /> : error ? <ErrorState message={error} onRetry={fetchProfile} /> : (
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+            <form onSubmit={handleSubmit} className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-5 dark:border-gray-700">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100 text-indigo-700"><User className="h-6 w-6" /></div>
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">Thông tin đăng nhập</h2>
+                  <p className="text-sm text-gray-500">Tên hiển thị và email có thể chỉnh sửa.</p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <span className="flex items-center gap-2"><User className="h-4 w-4" /> Họ và tên</span>
+                  <input value={profile.fullName} onChange={(event) => setProfile((current) => ({ ...current, fullName: event.target.value }))} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <span className="flex items-center gap-2"><Mail className="h-4 w-4" /> Email đăng nhập</span>
+                  <input type="email" value={profile.email} onChange={(event) => setProfile((current) => ({ ...current, email: event.target.value }))} className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <span className="flex items-center gap-2"><Phone className="h-4 w-4" /> Số điện thoại</span>
+                  <input value={profile.phone} readOnly placeholder="Chưa có thông tin" className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                  <span className="flex items-center gap-2"><Building className="h-4 w-4" /> Phòng ban</span>
+                  <input value={profile.department} readOnly placeholder="Chưa có thông tin" className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-200 sm:col-span-2">
+                  <span className="flex items-center gap-2"><Shield className="h-4 w-4" /> Quyền hệ thống</span>
+                  <input value={profile.role} readOnly placeholder="Chưa được gán quyền" className="mt-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-500 dark:border-gray-600 dark:bg-gray-700" />
+                </label>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
+                  <Save className="h-4 w-4" /> {saving ? 'Đang lưu...' : 'Lưu hồ sơ'}
                 </button>
-              ))}
-            </nav>
+              </div>
+            </form>
+
+            <aside className="h-fit rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <LockKeyhole className="h-6 w-6 text-indigo-600" />
+              <h2 className="mt-3 font-semibold text-gray-900 dark:text-white">Bảo mật tài khoản</h2>
+              <p className="mt-2 text-sm leading-6 text-gray-500">Đổi mật khẩu nếu bạn nghi ngờ tài khoản đã bị truy cập trái phép.</p>
+              <button type="button" onClick={() => navigate('/update-password')} className="mt-5 w-full rounded-lg border border-indigo-200 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+                Đổi mật khẩu
+              </button>
+            </aside>
           </div>
-
-          {/* Content */}
-          <div className="flex-1">
-            <div className="bg-white shadow rounded-lg">
-              {activeTab === 'profile' && (
-                <div className="p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-6">Profile Information</h3>
-                  <form onSubmit={handleProfileUpdate} className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Full Name
-                        </label>
-                        <input
-                          type="text"
-                          value={profile.fullName}
-                          onChange={(e) => setProfile(prev => ({ ...prev, fullName: e.target.value }))}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={profile.email}
-                          onChange={(e) => setProfile(prev => ({ ...prev, email: e.target.value }))}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Phone
-                        </label>
-                        <input
-                          type="tel"
-                          value={profile.phone}
-                          onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Company
-                        </label>
-                        <input
-                          type="text"
-                          value={profile.company}
-                          onChange={(e) => setProfile(prev => ({ ...prev, company: e.target.value }))}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700">
-                          Role
-                        </label>
-                        <select
-                          value={profile.role}
-                          onChange={(e) => setProfile(prev => ({ ...prev, role: e.target.value }))}
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        >
-                          <option value="Fund Manager">Fund Manager</option>
-                          <option value="Admin">Admin</option>
-                          <option value="Investor">Investor</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <button
-                        type="submit"
-                        className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                      >
-                        Save Changes
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {activeTab === 'notifications' && (
-                <div className="p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-6">Notification Preferences</h3>
-                  <div className="space-y-6">
-                    {[
-                      { key: 'emailReports', label: 'Email Reports', description: 'Receive monthly performance reports via email' },
-                      { key: 'transactionAlerts', label: 'Transaction Alerts', description: 'Get notified of all fund transactions' },
-                      { key: 'performanceUpdates', label: 'Performance Updates', description: 'Weekly portfolio performance updates' },
-                      { key: 'systemMaintenance', label: 'System Maintenance', description: 'Notifications about system updates and maintenance' },
-                    ].map((item) => (
-                      <div key={item.key} className="flex items-start">
-                        <div className="flex items-center h-5">
-                          <input
-                            type="checkbox"
-                            checked={notifications[item.key]}
-                            onChange={() => handleNotificationChange(item.key)}
-                            className="focus:ring-indigo-500 h-4 w-4 text-indigo-600 border-gray-300 rounded"
-                          />
-                        </div>
-                        <div className="ml-3 text-sm">
-                          <label className="font-medium text-gray-700">{item.label}</label>
-                          <p className="text-gray-500">{item.description}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'security' && (
-                <div className="p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-6">Security Settings</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Password</h4>
-                      <button className="bg-white border border-gray-300 rounded-md shadow-sm py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Change Password
-                      </button>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Two-Factor Authentication</h4>
-                      <p className="text-sm text-gray-500 mb-3">Add an extra layer of security to your account</p>
-                      <button className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Enable 2FA
-                      </button>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Active Sessions</h4>
-                      <p className="text-sm text-gray-500 mb-3">Manage your active sessions across devices</p>
-                      <button className="bg-white border border-gray-300 rounded-md shadow-sm py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        View Sessions
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'billing' && (
-                <div className="p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-6">Billing & Subscription</h3>
-                  <div className="space-y-6">
-                    <div className="bg-green-50 border border-green-200 rounded-md p-4">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <CreditCard className="h-5 w-5 text-green-400" />
-                        </div>
-                        <div className="ml-3">
-                          <h3 className="text-sm font-medium text-green-800">
-                            Professional Plan - Active
-                          </h3>
-                          <div className="mt-2 text-sm text-green-700">
-                            <p>$299/month • Next billing date: February 15, 2024</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Payment Method</h4>
-                      <div className="bg-gray-50 rounded-md p-4">
-                        <p className="text-sm text-gray-900">**** **** **** 4242</p>
-                        <p className="text-sm text-gray-500">Expires 12/26</p>
-                      </div>
-                      <button className="mt-3 bg-white border border-gray-300 rounded-md shadow-sm py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Update Payment Method
-                      </button>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Billing History</h4>
-                      <button className="bg-white border border-gray-300 rounded-md shadow-sm py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Download Invoices
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'system' && (
-                <div className="p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-6">System Preferences</h3>
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">Data Export</h4>
-                      <p className="text-sm text-gray-500 mb-3">Download all your data in a portable format</p>
-                      <button className="bg-indigo-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Request Data Export
-                      </button>
-                    </div>
-                    
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-700 mb-3">API Access</h4>
-                      <p className="text-sm text-gray-500 mb-3">Manage API keys for third-party integrations</p>
-                      <button className="bg-white border border-gray-300 rounded-md shadow-sm py-2 px-4 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                        Manage API Keys
-                      </button>
-                    </div>
-                    
-                    <div className="border-t border-gray-200 pt-6">
-                      <h4 className="text-sm font-medium text-red-700 mb-3">Danger Zone</h4>
-                      <p className="text-sm text-gray-500 mb-3">Permanently delete your account and all data</p>
-                      <button className="bg-red-600 border border-transparent rounded-md shadow-sm py-2 px-4 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                        Delete Account
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+        )}
+      </PageTransition>
     </Layout>
   );
 };
