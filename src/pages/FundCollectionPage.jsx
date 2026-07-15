@@ -159,8 +159,10 @@ const FundCollectionPage = () => {
       }
       setShowPaymentModal(false);
       showToast('Đã ghi nhận khoản thu.');
+      return true;
     } catch (error) {
       showToast(`Không thể ghi nhận khoản thu: ${error.message}`, 'error');
+      return false;
     }
   };
 
