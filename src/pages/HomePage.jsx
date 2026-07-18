@@ -144,7 +144,11 @@ const HomePage = () => {
         // Calculate the fund summary from immutable ledger rows rather than a
         // cached employee total or a view that may drift from the ledger.
         const pendingBillsResponse = await supabase.from('bill_sharing')
-          .select('bill_sharing_participants(amount_owed, payment_method)')
+          .select(`
+            total_amount,
+            bill_sharing_expenses(expense_id),
+            bill_sharing_participants(amount_owed, payment_method)
+          `)
           .eq('status', 'pending');
 
         if (pendingBillsResponse.error) throw pendingBillsResponse.error;
@@ -154,14 +158,20 @@ const HomePage = () => {
           0
         );
 
-        // Pending direct payments are future reimbursements, not current cash.
+        // A pending bill has not been charged to the displayed current balance
+        // yet. Its fund-funded portion is shown separately as the projection.
         const pendingBills = pendingBillsResponse.data || [];
-
-        const pendingDirectReceivables = pendingBills.reduce((total, bill) => {
+        const pendingExpenseIds = new Set(
+          pendingBills.flatMap((bill) => (
+            (bill.bill_sharing_expenses || []).map((expense) => expense.expense_id)
+          ))
+        );
+        const pendingFundDeduction = pendingBills.reduce((total, bill) => {
           const directTotal = (bill.bill_sharing_participants || [])
             .filter(p => p.payment_method === 'direct')
             .reduce((sum, p) => sum + Number(p.amount_owed || 0), 0);
-          return total + directTotal;
+          const fundPortion = Math.max(0, Number(bill.total_amount || 0) - directTotal);
+          return total + fundPortion;
         }, 0);
 
         // Get ALL employees (including those who left) for proper status calculation
@@ -189,19 +199,25 @@ const HomePage = () => {
         const expensesData = expensesResponse.data || [];
         if (expensesResponse.error) throw expensesResponse.error;
 
-        // Pending sharing does not undo an expense that has already occurred.
-        // Reimbursement reduces net_amount only when finalization succeeds.
+        // Keep the gross/net expense total for reporting. For the current
+        // balance, defer expenses linked to a pending sharing until finalization.
         const totalSpentNet = (expensesData || []).reduce((sum, e) => {
           return sum + Number((e.net_amount ?? e.amount) || 0);
         }, 0);
+        const finalizedSpentNet = (expensesData || []).reduce((sum, e) => {
+          if (pendingExpenseIds.has(e.id)) return sum;
+          return sum + Number((e.net_amount ?? e.amount) || 0);
+        }, 0);
 
-        const balanceAfterPendingBills = correctedTotalCollected - totalSpentNet;
-        const currentAvailableBalance = balanceAfterPendingBills + pendingDirectReceivables;
+        const currentAvailableBalance = correctedTotalCollected - finalizedSpentNet;
+        const balanceAfterPendingBills = currentAvailableBalance - pendingFundDeduction;
 
         console.log('HomePage fund calculation:', {
           totalEmployees: employeesData.length,
           correctedTotalCollected,
           totalSpentNet,
+          finalizedSpentNet,
+          pendingFundDeduction,
           currentAvailableBalance,
           balanceAfterPendingBills
         });
