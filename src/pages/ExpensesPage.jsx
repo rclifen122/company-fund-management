@@ -145,6 +145,7 @@ const ExpensesPage = () => {
       showToast(isEditing ? 'Đã cập nhật chi phí.' : 'Đã thêm chi phí.');
     } catch (err) {
       showToast(`Không thể lưu chi phí: ${err.message}`, 'error');
+      throw err;
     }
   };
 
@@ -261,7 +262,7 @@ const ExpensesPage = () => {
           onSubmit={handleExpenseSubmit}
           expense={editingExpense}
           isEditing={!!editingExpense}
-          lockAmount={editingExpense?.sharing_status !== 'not_shared'}
+          lockAmount={Boolean(editingExpense) && editingExpense.sharing_status !== 'not_shared'}
         />
       </PageTransition>
     </Layout>
