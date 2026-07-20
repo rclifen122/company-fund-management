@@ -9,6 +9,7 @@ import { useFeedback } from '../contexts/feedback';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND } from '../utils/format';
+import { FUND_DUE_DAY } from '../utils/fundPolicy';
 import {
   EMPLOYEE_MEMBERSHIP,
   getEmployeeMembershipMode,
@@ -90,6 +91,7 @@ const FundCollectionPage = () => {
       .channel('fund-collection-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, fetchFundCollectionData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payments' }, fetchFundCollectionData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payment_reconciliations' }, fetchFundCollectionData)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [fetchFundCollectionData]);
@@ -112,7 +114,9 @@ const FundCollectionPage = () => {
 
   const activeFundEmployees = employees.filter(isActiveFundMember);
   const paidEmployees = activeFundEmployees.filter((employee) => coveredCurrentMonth.has(String(employee.id))).length;
-  const pendingEmployees = activeFundEmployees.length - paidEmployees;
+  const unpaidEmployees = activeFundEmployees.length - paidEmployees;
+  const overdueEmployees = new Date().getDate() > FUND_DUE_DAY ? unpaidEmployees : 0;
+  const pendingEmployees = unpaidEmployees - overdueEmployees;
   const inactiveEmployees = employees.filter((employee) => getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.INACTIVE).length;
   const totalCollected = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const currentMonthCollected = payments
@@ -186,7 +190,7 @@ const FundCollectionPage = () => {
           <div className="rounded-lg bg-white p-4 shadow sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-medium text-gray-600 sm:text-sm">Tổng Thu Được</p><p className="mt-1 text-lg font-bold text-gray-900 sm:text-2xl">{formatVND(totalCollected)}</p><p className="mt-1 text-[11px] text-green-600 sm:text-xs">+{formatVND(currentMonthCollected)} tháng này</p></div><PiggyBank className="h-7 w-7 shrink-0 text-green-600 sm:h-8 sm:w-8" /></div></div>
           <div className="rounded-lg bg-white p-4 shadow sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-medium text-gray-600 sm:text-sm">Tháng Hiện Tại</p><p className="mt-1 text-lg font-bold text-gray-900 sm:text-2xl">{formatVND(currentMonthCollected)}</p><p className="mt-1 text-[11px] text-gray-500 sm:text-xs">/ {formatVND(expectedMonthlyTotal)} dự kiến</p></div><Calendar className="h-7 w-7 shrink-0 text-blue-600 sm:h-8 sm:w-8" /></div></div>
           <div className="rounded-lg bg-white p-4 shadow sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-medium text-gray-600 sm:text-sm">Tỷ Lệ Thu</p><p className="mt-1 text-lg font-bold text-gray-900 sm:text-2xl">{Math.round(collectionRate)}%</p><p className="mt-1 text-[11px] text-gray-500 sm:text-xs">{paidEmployees}/{activeFundEmployees.length} người tham gia quỹ</p></div><TrendingUp className="h-7 w-7 shrink-0 text-indigo-600 sm:h-8 sm:w-8" /></div></div>
-          <div className="rounded-lg bg-white p-4 shadow sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-medium text-gray-600 sm:text-sm">Chưa Thu</p><p className="mt-1 text-lg font-bold text-gray-900 sm:text-2xl">{formatVND(totalOutstanding)}</p><p className="mt-1 text-[11px] text-red-600 sm:text-xs">{pendingEmployees} người chờ nộp</p></div><Users className="h-7 w-7 shrink-0 text-red-600 sm:h-8 sm:w-8" /></div></div>
+          <div className="rounded-lg bg-white p-4 shadow sm:p-5"><div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="text-xs font-medium text-gray-600 sm:text-sm">Chưa Thu</p><p className="mt-1 text-lg font-bold text-gray-900 sm:text-2xl">{formatVND(totalOutstanding)}</p><p className="mt-1 text-[11px] text-red-600 sm:text-xs">{unpaidEmployees} người chờ nộp</p></div><Users className="h-7 w-7 shrink-0 text-red-600 sm:h-8 sm:w-8" /></div></div>
         </div>
 
         <div className="rounded-lg bg-white p-6 shadow">
@@ -194,7 +198,7 @@ const FundCollectionPage = () => {
           <div className="mt-6 grid grid-cols-2 gap-5 md:grid-cols-4">
             <div className="text-center"><CheckCircle className="mx-auto h-10 w-10 rounded-full bg-green-100 p-2 text-green-600" /><p className="mt-2 text-2xl font-bold text-green-600">{paidEmployees}</p><p className="text-sm font-medium">Đã Nộp</p></div>
             <div className="text-center"><Clock className="mx-auto h-10 w-10 rounded-full bg-yellow-100 p-2 text-yellow-600" /><p className="mt-2 text-2xl font-bold text-yellow-600">{pendingEmployees}</p><p className="text-sm font-medium">Chờ Nộp</p></div>
-            <div className="text-center"><AlertTriangle className="mx-auto h-10 w-10 rounded-full bg-red-100 p-2 text-red-600" /><p className="mt-2 text-2xl font-bold text-red-600">0</p><p className="text-sm font-medium">Quá Hạn</p></div>
+            <div className="text-center"><AlertTriangle className="mx-auto h-10 w-10 rounded-full bg-red-100 p-2 text-red-600" /><p className="mt-2 text-2xl font-bold text-red-600">{overdueEmployees}</p><p className="text-sm font-medium">Quá Hạn</p></div>
             <div className="text-center"><CheckCircle className="mx-auto h-10 w-10 rounded-full bg-blue-100 p-2 text-blue-600" /><p className="mt-2 text-2xl font-bold text-blue-600">{inactiveEmployees}</p><p className="text-sm font-medium">Đã Nghỉ</p></div>
           </div>
           <div className="mt-6"><div className="mb-2 flex justify-between text-sm text-gray-600"><span>Tiến độ thu quỹ tháng này</span><span>{Math.round(collectionRate)}%</span></div><div className="h-2 w-full rounded-full bg-gray-200"><div className="h-2 rounded-full bg-green-600 transition-all" style={{ width: `${collectionRate}%` }} /></div></div>

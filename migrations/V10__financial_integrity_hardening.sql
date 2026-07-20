@@ -75,7 +75,7 @@ begin
   ) then
     alter table public.fund_payments
       add constraint fund_payments_method_check
-      check (payment_method in ('cash', 'bank_transfer', 'e_wallet')) not valid;
+      check (payment_method in ('cash', 'bank_transfer', 'e_wallet', 'other')) not valid;
   end if;
 
   if not exists (

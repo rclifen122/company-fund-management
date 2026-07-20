@@ -7,6 +7,7 @@ import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { summarizePendingBillFinancials } from '../utils/pendingBillFinancials';
 import { formatVND } from '../utils/format';
+import { FUND_DUE_DAY } from '../utils/fundPolicy';
 import { ErrorState, PageSkeleton } from '../components/PageState';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
 import {
@@ -36,7 +37,7 @@ const HomePage = () => {
     completedCount: 0,
     collectionRate: 0,
     expenseRate: 0,
-    monthlyGrowth: 0,
+    monthlyGrowth: null,
     projectedBalance: 0
   });
   const [monthlyData, setMonthlyData] = useState([]);
@@ -231,11 +232,21 @@ const HomePage = () => {
 
         const processedEmployees = employeesData?.map(employee => {
           // If employee has left (has leave_date), set status accordingly
-          if (employee.leave_date || employee.status === 'inactive' || !employee.participates_in_fund) {
+          if (employee.leave_date || employee.status === 'inactive') {
             return {
               ...employee,
               current_month_status: 'completed', // Special status for employees who left
               last_payment_date: employee.leave_date
+            };
+          }
+
+          // Active employees who simply don't participate in the fund are not
+          // "completed" (that tile means people who left) — track them apart.
+          if (!employee.participates_in_fund) {
+            return {
+              ...employee,
+              current_month_status: 'non_fund',
+              last_payment_date: null
             };
           }
 
@@ -259,6 +270,8 @@ const HomePage = () => {
           let status = 'pending';
           if (isCurrentMonthCovered) {
             status = 'paid';
+          } else if (new Date().getDate() > FUND_DUE_DAY) {
+            status = 'overdue';
           }
 
           return {
@@ -269,11 +282,29 @@ const HomePage = () => {
         }) || [];
 
         // Calculate employee status counts
-        const activeEmployees = processedEmployees.filter(e => e.current_month_status !== 'completed');
+        const activeEmployees = processedEmployees.filter(
+          e => e.current_month_status !== 'completed' && e.current_month_status !== 'non_fund'
+        );
         const paidEmployees = activeEmployees.filter(e => e.current_month_status === 'paid').length;
         const pendingEmployees = activeEmployees.filter(e => e.current_month_status === 'pending').length;
         const overdueEmployees = activeEmployees.filter(e => e.current_month_status === 'overdue').length;
         const completedEmployees = processedEmployees.filter(e => e.current_month_status === 'completed').length;
+
+        // Growth = fund collected this month vs last month (by payment_date).
+        const sumForMonth = (year, monthIndex) => allPaymentsData.reduce((sum, payment) => {
+          if (!payment.payment_date) return sum;
+          const paymentDate = new Date(payment.payment_date);
+          return paymentDate.getFullYear() === year && paymentDate.getMonth() === monthIndex
+            ? sum + Number(payment.amount || 0)
+            : sum;
+        }, 0);
+        const now = new Date();
+        const previousMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const collectedThisMonth = sumForMonth(now.getFullYear(), now.getMonth());
+        const collectedPreviousMonth = sumForMonth(previousMonthDate.getFullYear(), previousMonthDate.getMonth());
+        const monthlyGrowth = collectedPreviousMonth > 0
+          ? ((collectedThisMonth - collectedPreviousMonth) / collectedPreviousMonth) * 100
+          : null;
 
         // Calculate stats - with corrected employee data
         if (employeesData) {
@@ -294,7 +325,7 @@ const HomePage = () => {
               (paidEmployees / activeEmployees.length) * 100 : 0,
             expenseRate: correctedTotalCollected > 0 ?
               (currentTotalExpenses / correctedTotalCollected) * 100 : 0,
-            monthlyGrowth: 15.2,
+            monthlyGrowth,
             projectedBalance: balanceAfterPendingBills
           };
           console.log('Setting new stats:', newStats);
@@ -432,8 +463,10 @@ const HomePage = () => {
           }
         });
 
-        // Add recent expenses  
-        (expensesData || []).slice(0, 2).forEach(expense => {
+        // Add recent expenses (the query has no order clause, so sort here)
+        const recentExpenses = [...(expensesData || [])]
+          .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        recentExpenses.slice(0, 2).forEach(expense => {
           if (!expense) return;
           try {
             const timeAgo = expense.created_at ?
@@ -443,7 +476,7 @@ const HomePage = () => {
               id: expense.id || Date.now(),
               type: 'expense',
               description: expense.description || 'Không có mô tả',
-              amount: `-${new Intl.NumberFormat('vi-VN').format(expense.amount || 0)} ₫`,
+              amount: `-${new Intl.NumberFormat('vi-VN').format(Number((expense.net_amount ?? expense.amount) || 0))} ₫`,
               time: timeAgo,
               status: 'completed'
             });
@@ -551,8 +584,10 @@ const HomePage = () => {
             <StatCard
               title="Tổng Thu Quỹ"
               value={formatVND(stats.totalCollected)}
-              change={`+${stats.monthlyGrowth}%`}
-              changeType="positive"
+              change={stats.monthlyGrowth == null
+                ? null
+                : `${stats.monthlyGrowth >= 0 ? '+' : ''}${stats.monthlyGrowth.toFixed(1)}% so với tháng trước`}
+              changeType={stats.monthlyGrowth != null && stats.monthlyGrowth < 0 ? 'negative' : 'positive'}
               icon={Banknote}
               onClick={() => navigate('/fund-collection')}
             />

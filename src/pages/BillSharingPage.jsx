@@ -184,6 +184,7 @@ const BillSharingPage = () => {
         setExpenses((current) => current.filter((expense) => !selectedExpenses.has(expense.id)));
         showToast('Đã tạo lần chia tiền.');
         setSelectedExpenses(new Set());
+        setBirthdayPeople(new Set());
         return;
       }
       const { error } = await supabase.rpc('create_bill_sharing', {
@@ -195,6 +196,7 @@ const BillSharingPage = () => {
 
       showToast('Đã tạo lần chia tiền.');
       setSelectedExpenses(new Set());
+      setBirthdayPeople(new Set());
       await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
 
     } catch (error) {
@@ -337,7 +339,7 @@ const BillSharingPage = () => {
       });
       if (error) throw error;
       showToast('Đã hoàn tất chia tiền và cập nhật chi phí.');
-      fetchSharingHistory();
+      await Promise.all([fetchSharingHistory(), fetchAvailableExpenses()]);
     } catch (error) {
       console.error('Error finalizing sharing event:', error);
       showToast('Không thể hoàn tất lần chia. Vui lòng thử lại.', 'error');
@@ -780,8 +782,9 @@ const BillSharingPage = () => {
       {detailsSharing && (() => {
         const participants = detailsSharing.bill_sharing_participants || [];
         const totalAmount = Number(detailsSharing?.total_amount || 0);
-        const directTotalOwed = participants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
-        const directCollected = participants.filter(p => p?.payment_status === 'paid').reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+        const directParticipants = participants.filter(p => p?.payment_method === 'direct');
+        const directTotalOwed = directParticipants.reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
+        const directCollected = directParticipants.filter(p => p?.payment_status === 'paid').reduce((sum, p) => sum + Number(p?.amount_owed || 0), 0);
         const fundCovered = Math.max(0, totalAmount - directTotalOwed);
         const directOutstanding = Math.max(0, directTotalOwed - directCollected);
 
