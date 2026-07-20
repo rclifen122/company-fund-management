@@ -9,6 +9,7 @@ import { useFeedback } from '../contexts/feedback';
 import { ErrorState, PageSkeleton } from '../components/PageState';
 import { isDevelopmentMode } from '../utils/env';
 import { DEMO_EXPENSES } from '../utils/demoData';
+import { summarizePendingBillFinancials } from '../utils/pendingBillFinancials';
 
 const ExpensesPage = () => {
   const { showToast, confirmAction } = useFeedback();
@@ -25,20 +26,39 @@ const ExpensesPage = () => {
         setExpenses(DEMO_EXPENSES.map((expense) => ({ ...expense })));
         return;
       }
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .order('expense_date', { ascending: false });
+      const [expensesResponse, pendingBillsResponse] = await Promise.all([
+        supabase
+          .from('expenses')
+          .select('*')
+          .order('expense_date', { ascending: false }),
+        supabase
+          .from('bill_sharing')
+          .select(`
+            bill_sharing_expenses(expense_id, amount),
+            bill_sharing_participants(amount_owed, payment_method, payment_status)
+          `)
+          .eq('status', 'pending'),
+      ]);
 
-      if (error) throw error;
+      if (expensesResponse.error) throw expensesResponse.error;
+      if (pendingBillsResponse.error) throw pendingBillsResponse.error;
 
-      const processedExpenses = (data || []).map(expense => ({
-        ...expense,
-        amount: Number(expense.amount || 0),
-        amount_reimbursed: Number(expense.amount_reimbursed || 0),
-        net_amount: Number(expense.net_amount !== null ? expense.net_amount : (expense.amount || 0)),
-        sharing_status: expense.sharing_status || 'not_shared'
-      }));
+      const pendingFinancials = summarizePendingBillFinancials(pendingBillsResponse.data || []);
+
+      const processedExpenses = (expensesResponse.data || []).map((expense) => {
+        const amount = Number(expense.amount || 0);
+        const storedReimbursement = Number(expense.amount_reimbursed || 0);
+        const pendingPaidDirect = pendingFinancials.paidDirectByExpense.get(expense.id) || 0;
+        const effectiveReimbursement = Math.min(amount, storedReimbursement + pendingPaidDirect);
+
+        return {
+          ...expense,
+          amount,
+          amount_reimbursed: effectiveReimbursement,
+          net_amount: amount - effectiveReimbursement,
+          sharing_status: expense.sharing_status || 'not_shared'
+        };
+      });
       setExpenses(processedExpenses);
     } catch (err) {
       console.error('Error fetching expenses data:', err);
@@ -54,6 +74,9 @@ const ExpensesPage = () => {
 
     const channel = supabase.channel('expenses-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+        fetchExpensesData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_sharing_participants' }, () => {
         fetchExpensesData();
       })
       .subscribe();

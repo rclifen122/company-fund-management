@@ -5,6 +5,7 @@ import StatCard from '../components/StatCard';
 import { PageTransition, StaggerContainer, StaggerItem } from '../components/PageTransition';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
+import { summarizePendingBillFinancials } from '../utils/pendingBillFinancials';
 import { formatVND } from '../utils/format';
 import { ErrorState, PageSkeleton } from '../components/PageState';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
@@ -146,8 +147,8 @@ const HomePage = () => {
         const pendingBillsResponse = await supabase.from('bill_sharing')
           .select(`
             total_amount,
-            bill_sharing_expenses(expense_id),
-            bill_sharing_participants(amount_owed, payment_method)
+            bill_sharing_expenses(expense_id, amount),
+            bill_sharing_participants(amount_owed, payment_method, payment_status)
           `)
           .eq('status', 'pending');
 
@@ -158,21 +159,10 @@ const HomePage = () => {
           0
         );
 
-        // A pending bill has not been charged to the displayed current balance
-        // yet. Its fund-funded portion is shown separately as the projection.
+        // Direct reimbursements stay on the expense side of the ledger. They
+        // never increase total fund collection.
         const pendingBills = pendingBillsResponse.data || [];
-        const pendingExpenseIds = new Set(
-          pendingBills.flatMap((bill) => (
-            (bill.bill_sharing_expenses || []).map((expense) => expense.expense_id)
-          ))
-        );
-        const pendingFundDeduction = pendingBills.reduce((total, bill) => {
-          const directTotal = (bill.bill_sharing_participants || [])
-            .filter(p => p.payment_method === 'direct')
-            .reduce((sum, p) => sum + Number(p.amount_owed || 0), 0);
-          const fundPortion = Math.max(0, Number(bill.total_amount || 0) - directTotal);
-          return total + fundPortion;
-        }, 0);
+        const pendingFinancials = summarizePendingBillFinancials(pendingBills);
 
         // Get ALL employees (including those who left) for proper status calculation
         const employeesResponse = await supabase
@@ -199,25 +189,30 @@ const HomePage = () => {
         const expensesData = expensesResponse.data || [];
         if (expensesResponse.error) throw expensesResponse.error;
 
-        // Keep the gross/net expense total for reporting. For the current
-        // balance, defer expenses linked to a pending sharing until finalization.
-        const totalSpentNet = (expensesData || []).reduce((sum, e) => {
-          return sum + Number((e.net_amount ?? e.amount) || 0);
-        }, 0);
-        const finalizedSpentNet = (expensesData || []).reduce((sum, e) => {
-          if (pendingExpenseIds.has(e.id)) return sum;
+        const storedTotalExpenses = (expensesData || []).reduce((sum, e) => {
           return sum + Number((e.net_amount ?? e.amount) || 0);
         }, 0);
 
-        const currentAvailableBalance = correctedTotalCollected - finalizedSpentNet;
-        const balanceAfterPendingBills = currentAvailableBalance - pendingFundDeduction;
+        // Pending paid Direct has physically returned to the fund but is not
+        // persisted in expenses.amount_reimbursed until the bill is finalized.
+        const currentTotalExpenses = Math.max(
+          0,
+          storedTotalExpenses - pendingFinancials.paidDirectTotal
+        );
+        const projectedTotalExpenses = Math.max(
+          0,
+          currentTotalExpenses - pendingFinancials.outstandingDirectTotal
+        );
+        const currentAvailableBalance = correctedTotalCollected - currentTotalExpenses;
+        const balanceAfterPendingBills = correctedTotalCollected - projectedTotalExpenses;
 
         console.log('HomePage fund calculation:', {
           totalEmployees: employeesData.length,
           correctedTotalCollected,
-          totalSpentNet,
-          finalizedSpentNet,
-          pendingFundDeduction,
+          currentTotalExpenses,
+          projectedTotalExpenses,
+          pendingDirectPaid: pendingFinancials.paidDirectTotal,
+          pendingDirectOutstanding: pendingFinancials.outstandingDirectTotal,
           currentAvailableBalance,
           balanceAfterPendingBills
         });
@@ -284,7 +279,7 @@ const HomePage = () => {
         if (employeesData) {
           const newStats = {
             totalCollected: correctedTotalCollected,
-            totalExpenses: totalSpentNet,
+            totalExpenses: currentTotalExpenses,
             currentBalance: currentAvailableBalance,
             totalEmployees: activeEmployees.length, // Only active employees
             paidThisMonth: paidEmployees,
@@ -298,7 +293,7 @@ const HomePage = () => {
             collectionRate: activeEmployees.length > 0 ?
               (paidEmployees / activeEmployees.length) * 100 : 0,
             expenseRate: correctedTotalCollected > 0 ?
-              (totalSpentNet / correctedTotalCollected) * 100 : 0,
+              (currentTotalExpenses / correctedTotalCollected) * 100 : 0,
             monthlyGrowth: 15.2,
             projectedBalance: balanceAfterPendingBills
           };
