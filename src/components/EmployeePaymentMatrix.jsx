@@ -5,7 +5,7 @@ import {
   getEmployeeMembershipMode,
   isActiveFundMember,
 } from '../utils/employeeMembership';
-import { getCoveredMonthKeys } from '../utils/fundPolicy';
+import { getCoveredMonthKeys, getFundStartMonthKey } from '../utils/fundPolicy';
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => ({
   number: index + 1,
@@ -24,11 +24,6 @@ const STATUS_STYLES = {
   overdue: { label: 'Quá hạn', className: 'border-rose-200 bg-rose-50 text-rose-700', Icon: AlertTriangle },
   upcoming: { label: 'Chưa đến kỳ', className: 'border-slate-200 bg-slate-50 text-slate-400', Icon: Minus },
   not_applicable: { label: 'Không tham gia', className: 'border-gray-200 bg-gray-50 text-gray-300', Icon: Minus },
-};
-
-const getMonthKey = (value) => {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})/);
-  return match ? `${match[1]}-${match[2]}` : null;
 };
 
 const buildCoveredMonths = (payments, reconciliations) => {
@@ -52,8 +47,8 @@ const buildCoveredMonths = (payments, reconciliations) => {
 const getStatus = (employee, monthKey, coveredMonths, currentMonthKey) => {
   if (coveredMonths.has(monthKey)) return 'paid';
   if (!isActiveFundMember(employee)) return 'not_applicable';
-  const joinMonthKey = getMonthKey(employee.join_date);
-  if (joinMonthKey && monthKey < joinMonthKey) return 'not_applicable';
+  const startMonthKey = getFundStartMonthKey(employee);
+  if (startMonthKey && monthKey < startMonthKey) return 'not_applicable';
   if (monthKey > currentMonthKey) return 'upcoming';
   if (monthKey === currentMonthKey) return 'pending';
   return 'overdue';

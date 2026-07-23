@@ -9,7 +9,7 @@ import { useFeedback } from '../contexts/feedback';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND } from '../utils/format';
-import { FUND_DUE_DAY, getCoveredMonthKeys } from '../utils/fundPolicy';
+import { getCoveredMonthKeys, getFundStartMonthKey, isMonthOverdue } from '../utils/fundPolicy';
 import {
   EMPLOYEE_MEMBERSHIP,
   getEmployeeMembershipMode,
@@ -107,23 +107,31 @@ const FundCollectionPage = () => {
   }, [currentMonthKey, payments, reconciliations]);
 
   const activeFundEmployees = employees.filter(isActiveFundMember);
-  const paidEmployees = activeFundEmployees.filter((employee) => coveredCurrentMonth.has(String(employee.id))).length;
-  const unpaidEmployees = activeFundEmployees.length - paidEmployees;
-  const overdueEmployees = new Date().getDate() > FUND_DUE_DAY ? unpaidEmployees : 0;
+  // Người chưa đến tháng bắt đầu đóng quỹ (fund_start_date) không tính vào
+  // các con số thu tháng này.
+  const dueFundEmployees = activeFundEmployees.filter((employee) => {
+    const startMonthKey = getFundStartMonthKey(employee);
+    return !startMonthKey || startMonthKey <= currentMonthKey;
+  });
+  const paidEmployees = dueFundEmployees.filter((employee) => coveredCurrentMonth.has(String(employee.id))).length;
+  const unpaidEmployees = dueFundEmployees.length - paidEmployees;
+  const overdueEmployees = dueFundEmployees.filter((employee) => (
+    !coveredCurrentMonth.has(String(employee.id)) && isMonthOverdue(employee, currentMonthKey, currentMonthKey)
+  )).length;
   const pendingEmployees = unpaidEmployees - overdueEmployees;
   const inactiveEmployees = employees.filter((employee) => getEmployeeMembershipMode(employee) === EMPLOYEE_MEMBERSHIP.INACTIVE).length;
   const totalCollected = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const currentMonthCollected = payments
     .filter((payment) => String(payment.payment_date || '').slice(0, 7) === currentMonthKey)
     .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const expectedMonthlyTotal = activeFundEmployees.reduce(
+  const expectedMonthlyTotal = dueFundEmployees.reduce(
     (sum, employee) => sum + Number(employee.monthly_contribution_amount || 0),
     0
   );
-  const totalOutstanding = activeFundEmployees
+  const totalOutstanding = dueFundEmployees
     .filter((employee) => !coveredCurrentMonth.has(String(employee.id)))
     .reduce((sum, employee) => sum + Number(employee.monthly_contribution_amount || 0), 0);
-  const collectionRate = activeFundEmployees.length > 0 ? (paidEmployees / activeFundEmployees.length) * 100 : 0;
+  const collectionRate = dueFundEmployees.length > 0 ? (paidEmployees / dueFundEmployees.length) * 100 : 0;
 
   const statusYears = useMemo(() => {
     const currentYear = new Date().getFullYear();

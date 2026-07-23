@@ -7,7 +7,7 @@ import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { summarizePendingBillFinancials } from '../utils/pendingBillFinancials';
 import { formatVND } from '../utils/format';
-import { FUND_DUE_DAY, getCoveredMonthKeys } from '../utils/fundPolicy';
+import { getCoveredMonthKeys, getFundStartMonthKey, isMonthOverdue } from '../utils/fundPolicy';
 import { ErrorState, PageSkeleton } from '../components/PageState';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
 import {
@@ -267,10 +267,14 @@ const HomePage = () => {
           ));
 
           // Determine current month status
+          const startMonthKey = getFundStartMonthKey(employee);
           let status = 'pending';
           if (isCurrentMonthCovered) {
             status = 'paid';
-          } else if (new Date().getDate() > FUND_DUE_DAY) {
+          } else if (startMonthKey && startMonthKey > currentMonthKey) {
+            // Chưa đến tháng bắt đầu đóng — không tính vào chờ nộp/quá hạn.
+            status = 'not_started';
+          } else if (isMonthOverdue(employee, currentMonthKey, currentMonthKey)) {
             status = 'overdue';
           }
 
@@ -281,9 +285,10 @@ const HomePage = () => {
           };
         }) || [];
 
-        // Calculate employee status counts
+        // Calculate employee status counts. 'not_started' = chưa đến tháng bắt
+        // đầu đóng quỹ, tháng này họ chưa phải nộp nên không tính vào các tile.
         const activeEmployees = processedEmployees.filter(
-          e => e.current_month_status !== 'completed' && e.current_month_status !== 'non_fund'
+          e => !['completed', 'non_fund', 'not_started'].includes(e.current_month_status)
         );
         const paidEmployees = activeEmployees.filter(e => e.current_month_status === 'paid').length;
         const pendingEmployees = activeEmployees.filter(e => e.current_month_status === 'pending').length;

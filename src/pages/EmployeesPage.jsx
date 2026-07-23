@@ -9,6 +9,7 @@ import { ErrorState, PageSkeleton } from '../components/PageState';
 import { useFeedback } from '../contexts/feedback';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
+import { getCoveredMonthKeys, getFundStartMonthKey } from '../utils/fundPolicy';
 import {
   EMPLOYEE_MEMBERSHIP,
   getEmployeeMembershipMode,
@@ -72,20 +73,20 @@ const EmployeesPage = () => {
         const coveredMonths = new Set(
           payments
             .filter((payment) => String(payment.employee_id) === String(employee.id))
-            .flatMap((payment) => (
-              Array.isArray(payment.months_covered) && payment.months_covered.length > 0
-                ? payment.months_covered
-                : [String(payment.payment_date || '').slice(0, 7)]
-            ))
+            .flatMap((payment) => getCoveredMonthKeys(payment))
         );
         reconciliations
           .filter((item) => String(item.employee_id) === String(employee.id))
           .forEach((item) => coveredMonths.add(item.month_key));
 
         const mode = getEmployeeMembershipMode(employee);
-        const currentMonthStatus = mode === EMPLOYEE_MEMBERSHIP.FUND
-          ? coveredMonths.has(currentMonthKey) ? 'paid' : 'pending'
-          : mode;
+        const startMonthKey = getFundStartMonthKey(employee);
+        let currentMonthStatus = mode;
+        if (mode === EMPLOYEE_MEMBERSHIP.FUND) {
+          if (coveredMonths.has(currentMonthKey)) currentMonthStatus = 'paid';
+          else if (startMonthKey && startMonthKey > currentMonthKey) currentMonthStatus = 'not_started';
+          else currentMonthStatus = 'pending';
+        }
         return { ...employee, current_month_status: currentMonthStatus };
       }));
     } catch (error) {
@@ -119,6 +120,7 @@ const EmployeesPage = () => {
       department: employeeData.department,
       monthly_contribution_amount: Number(employeeData.monthly_contribution_amount),
       join_date: employeeData.join_date,
+      fund_start_date: employeeData.fund_start_date || null,
       leave_date: employeeData.leave_date || null,
       status: isInactive ? 'inactive' : 'active',
       participates_in_fund: isInactive ? false : employeeData.participates_in_fund !== false,
@@ -223,9 +225,15 @@ const EmployeesPage = () => {
       <div>
         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${MODE_STYLES[mode]}`}>{MODE_LABELS[mode]}</span>
         {mode === EMPLOYEE_MEMBERSHIP.FUND && (
-          <p className={`mt-1.5 text-xs ${employee.current_month_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
-            {employee.current_month_status === 'paid' ? 'Đã nộp tháng này' : 'Chờ nộp tháng này'}
-          </p>
+          employee.current_month_status === 'not_started' ? (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Bắt đầu đóng từ tháng {Number(String(getFundStartMonthKey(employee)).slice(5, 7))}/{String(getFundStartMonthKey(employee)).slice(0, 4)}
+            </p>
+          ) : (
+            <p className={`mt-1.5 text-xs ${employee.current_month_status === 'paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {employee.current_month_status === 'paid' ? 'Đã nộp tháng này' : 'Chờ nộp tháng này'}
+            </p>
+          )
         )}
       </div>
     );

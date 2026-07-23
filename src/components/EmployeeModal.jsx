@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, User, Mail, Phone, Building, DollarSign, Calendar, PiggyBank, Receipt } from 'lucide-react';
+import { FUND_DUE_DAY, suggestFundStartMonth } from '../utils/fundPolicy';
 
 const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false }) => {
   const [formData, setFormData] = useState({
@@ -9,6 +10,7 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
     department: '',
     monthly_contribution_amount: 100000,
     join_date: new Date().toISOString().split('T')[0],
+    fund_start_month: suggestFundStartMonth(new Date().toISOString().split('T')[0]),
     leave_date: '',
     status: 'active',
     participates_in_fund: true
@@ -17,13 +19,19 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
   // Update form data when employee prop changes (for editing)
   useEffect(() => {
     if (isEditing && employee) {
+      const joinDate = employee.join_date ? employee.join_date.split('T')[0] : new Date().toISOString().split('T')[0];
       setFormData({
         name: employee.name || '',
         email: employee.email || '',
         phone: employee.phone || '',
         department: employee.department || '',
         monthly_contribution_amount: employee.monthly_contribution_amount || 100000,
-        join_date: employee.join_date ? employee.join_date.split('T')[0] : new Date().toISOString().split('T')[0],
+        join_date: joinDate,
+        // Dữ liệu cũ chưa có fund_start_date: hiệu lực hiện tại là tháng của
+        // join_date, giữ nguyên chứ không áp gợi ý (tránh đổi lịch khi chỉ sửa tên).
+        fund_start_month: employee.fund_start_date
+          ? String(employee.fund_start_date).slice(0, 7)
+          : joinDate.slice(0, 7),
         leave_date: employee.leave_date ? employee.leave_date.split('T')[0] : '',
         status: employee.status || 'active',
         participates_in_fund: employee.participates_in_fund !== false
@@ -37,6 +45,7 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
         department: '',
         monthly_contribution_amount: 100000,
         join_date: new Date().toISOString().split('T')[0],
+        fund_start_month: suggestFundStartMonth(new Date().toISOString().split('T')[0]),
         leave_date: '',
         status: 'active',
         participates_in_fund: true
@@ -110,6 +119,14 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
       newErrors.join_date = 'Ngày tham gia là bắt buộc';
     }
 
+    if (formData.participates_in_fund && formData.status === 'active') {
+      if (!formData.fund_start_month) {
+        newErrors.fund_start_month = 'Tháng bắt đầu đóng quỹ là bắt buộc';
+      } else if (formData.join_date && formData.fund_start_month < formData.join_date.slice(0, 7)) {
+        newErrors.fund_start_month = 'Tháng bắt đầu đóng không thể trước tháng tham gia';
+      }
+    }
+
     if (formData.leave_date && formData.join_date) {
       const joinDate = new Date(formData.join_date);
       const leaveDate = new Date(formData.leave_date);
@@ -131,8 +148,9 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
 
     setIsSubmitting(true);
     try {
-      const submissionData = { ...formData };
-      
+      const { fund_start_month, ...submissionData } = formData;
+      submissionData.fund_start_date = fund_start_month ? `${fund_start_month}-01` : null;
+
       // Leaving the company changes membership status, not payment history.
       if (formData.leave_date) {
         submissionData.status = 'inactive';
@@ -151,6 +169,7 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
           department: '',
           monthly_contribution_amount: 100000,
           join_date: new Date().toISOString().split('T')[0],
+          fund_start_month: suggestFundStartMonth(new Date().toISOString().split('T')[0]),
           leave_date: '',
           status: 'active',
           participates_in_fund: true
@@ -178,6 +197,15 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
           status: value,
           leave_date: value === 'active' ? '' : prev.leave_date,
           participates_in_fund: value === 'inactive' ? false : prev.participates_in_fund,
+        };
+      }
+
+      // Thêm mới: đổi ngày tham gia thì gợi ý lại tháng bắt đầu (vẫn sửa tay được).
+      if (name === 'join_date' && !isEditing) {
+        return {
+          ...prev,
+          join_date: value,
+          fund_start_month: suggestFundStartMonth(value) || prev.fund_start_month,
         };
       }
 
@@ -391,6 +419,29 @@ const EmployeeModal = ({ isOpen, onClose, onSubmit, employee, isEditing = false 
                 />
                 {errors.join_date && <p className="mt-1 text-xs text-red-600">{errors.join_date}</p>}
               </div>
+
+              {/* Fund Start Month */}
+              {formData.participates_in_fund && formData.status === 'active' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <PiggyBank className="inline h-4 w-4 mr-1" />
+                    Tháng Bắt Đầu Đóng Quỹ *
+                  </label>
+                  <input
+                    type="month"
+                    name="fund_start_month"
+                    value={formData.fund_start_month}
+                    onChange={handleChange}
+                    className={`block w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                      errors.fund_start_month ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.fund_start_month && <p className="mt-1 text-xs text-red-600">{errors.fund_start_month}</p>}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Tham gia sau ngày {FUND_DUE_DAY} sẽ được gợi ý bắt đầu từ tháng kế tiếp. Các tháng trước đó không tính chưa thu/quá hạn.
+                  </p>
+                </div>
+              )}
 
               {/* Leave Date */}
               <div>
