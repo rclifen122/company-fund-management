@@ -5,6 +5,7 @@ import {
   getEmployeeMembershipMode,
   isActiveFundMember,
 } from '../utils/employeeMembership';
+import { getCoveredMonthKeys } from '../utils/fundPolicy';
 
 const MONTHS = Array.from({ length: 12 }, (_, index) => ({
   number: index + 1,
@@ -40,10 +41,7 @@ const buildCoveredMonths = (payments, reconciliations) => {
   };
 
   payments.forEach((payment) => {
-    const monthKeys = Array.isArray(payment.months_covered) && payment.months_covered.length > 0
-      ? payment.months_covered
-      : [getMonthKey(payment.payment_date)].filter(Boolean);
-    monthKeys.forEach((monthKey) => addMonth(payment.employee_id, monthKey));
+    getCoveredMonthKeys(payment).forEach((monthKey) => addMonth(payment.employee_id, monthKey));
   });
 
   // Những tháng đã đối soát trước đây được xem như tháng đã nộp bình thường.

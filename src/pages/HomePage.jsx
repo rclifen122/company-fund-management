@@ -7,7 +7,7 @@ import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { summarizePendingBillFinancials } from '../utils/pendingBillFinancials';
 import { formatVND } from '../utils/format';
-import { FUND_DUE_DAY } from '../utils/fundPolicy';
+import { FUND_DUE_DAY, getCoveredMonthKeys } from '../utils/fundPolicy';
 import { ErrorState, PageSkeleton } from '../components/PageState';
 import { DollarSign, TrendingDown, Users, AlertTriangle, PiggyBank, Receipt, Plus, TrendingUp, Bell, Calendar, Eye, Banknote, CreditCard, Target } from 'lucide-react';
 import {
@@ -260,7 +260,7 @@ const HomePage = () => {
           // Check if current month is covered by any payment
           const currentMonthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
           const isCurrentMonthCovered = employeePayments.some(payment => {
-            return payment.months_covered && payment.months_covered.includes(currentMonthKey);
+            return getCoveredMonthKeys(payment).includes(currentMonthKey);
           }) || reconciliationsData.some(reconciliation => (
             String(reconciliation.employee_id) === String(employee.id)
             && reconciliation.month_key === currentMonthKey

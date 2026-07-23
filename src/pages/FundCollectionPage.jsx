@@ -9,18 +9,12 @@ import { useFeedback } from '../contexts/feedback';
 import { supabase } from '../supabase';
 import { isDevelopmentMode } from '../utils/env';
 import { formatVND } from '../utils/format';
-import { FUND_DUE_DAY } from '../utils/fundPolicy';
+import { FUND_DUE_DAY, getCoveredMonthKeys } from '../utils/fundPolicy';
 import {
   EMPLOYEE_MEMBERSHIP,
   getEmployeeMembershipMode,
   isActiveFundMember,
 } from '../utils/employeeMembership';
-
-const getCoveredMonthKeys = (payment) => (
-  Array.isArray(payment.months_covered) && payment.months_covered.length > 0
-    ? payment.months_covered
-    : [String(payment.payment_date || '').slice(0, 7)].filter(Boolean)
-);
 
 const FundCollectionPage = () => {
   const { showToast } = useFeedback();
