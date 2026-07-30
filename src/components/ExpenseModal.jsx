@@ -12,6 +12,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAmountFocused, setIsAmountFocused] = useState(false);
 
   const categories = [
     { value: 'events', label: 'Sự kiện', icon: '🎉' },
@@ -45,6 +46,7 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
         });
       }
       setErrors({});
+      setIsAmountFocused(false);
     }
   }, [isOpen, isEditing, expense]);
 
@@ -196,15 +198,20 @@ const ExpenseModal = ({ isOpen, onClose, onSubmit, expense, isEditing = false, l
 
             {/* Amount Input */}
             <div>
-              <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="expense-amount" className="flex items-center text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className="h-4 w-4 mr-2" />
                 Số tiền *
               </label>
               <div className="relative">
                 <input
+                  id="expense-amount"
                   type="text"
-                  value={formData.amount ? formatVND(formData.amount) : ''}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={isAmountFocused ? formData.amount : (formData.amount ? formatVND(formData.amount) : '')}
                   onChange={handleAmountChange}
+                  onFocus={() => setIsAmountFocused(true)}
+                  onBlur={() => setIsAmountFocused(false)}
                   placeholder="100,000"
                   className="block w-full px-3 py-2 pr-12 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   disabled={isSubmitting || lockAmount}
