@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Calendar, CreditCard, DollarSign, FileText, User, X } from 'lucide-react';
+import BulkPaymentForm from './BulkPaymentForm';
 import { buildMonthAllocations } from '../utils/fundPaymentAllocation';
 
 const DEFAULT_MONTHLY_AMOUNT = 100000;
@@ -37,13 +38,22 @@ const generateMonthOptions = () => {
   return options;
 };
 
-const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
+const PaymentModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  employees = [],
+  payments = [],
+  reconciliations = [],
+}) => {
+  const [entryMode, setEntryMode] = useState('single');
   const [formData, setFormData] = useState(createInitialFormData);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setEntryMode('single');
       setFormData(createInitialFormData());
       setErrors({});
     }
@@ -161,7 +171,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
         notes: [formData.notes.trim(), allocationNote].filter(Boolean).join('\n'),
       };
 
-      const saved = await onSubmit(submitData);
+      const saved = await onSubmit([submitData]);
       if (saved !== false) onClose();
     } catch (error) {
       console.error('Không thể lưu khoản thu:', error);
@@ -183,7 +193,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
           aria-label="Đóng cửa sổ"
         />
 
-        <div className="relative flex max-h-[calc(100vh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-xl bg-white shadow-xl sm:max-h-[90vh]">
+        <div className={`relative flex max-h-[calc(100vh-1.5rem)] w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl transition-[max-width] sm:max-h-[90vh] ${entryMode === 'bulk' ? 'max-w-3xl' : 'max-w-md'}`}>
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 p-4 sm:p-6">
             <h3 className="text-lg font-medium text-gray-900">Ghi Nhận Thu Quỹ</h3>
             <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600" disabled={isSubmitting} aria-label="Đóng">
@@ -191,6 +201,38 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
             </button>
           </div>
 
+          <div className="shrink-0 border-b border-gray-200 bg-gray-50 px-4 py-3 sm:px-6">
+            <div className="grid grid-cols-2 rounded-lg bg-gray-200 p-1" role="group" aria-label="Cách nhập quỹ">
+              <button
+                type="button"
+                onClick={() => setEntryMode('single')}
+                disabled={isSubmitting}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition ${entryMode === 'single' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Một người
+              </button>
+              <button
+                type="button"
+                onClick={() => setEntryMode('bulk')}
+                disabled={isSubmitting}
+                className={`rounded-md px-3 py-2 text-sm font-medium transition ${entryMode === 'bulk' ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Nhiều người
+              </button>
+            </div>
+          </div>
+
+          {entryMode === 'bulk' ? (
+            <BulkPaymentForm
+              employees={employees}
+              payments={payments}
+              reconciliations={reconciliations}
+              onSubmit={onSubmit}
+              onClose={onClose}
+              isSubmitting={isSubmitting}
+              onSubmittingChange={setIsSubmitting}
+            />
+          ) : (
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
             <div>
@@ -381,6 +423,7 @@ const PaymentModal = ({ isOpen, onClose, onSubmit, employees = [] }) => {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </div>

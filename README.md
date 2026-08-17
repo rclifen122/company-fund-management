@@ -24,6 +24,7 @@ A modern, responsive web application for managing company internal funds, built 
 
 ### 💰 Fund Collection Management
 - **Multi-month Payment Support**: Employees can pay for multiple months at once
+- **Bulk Monthly Collection**: Record one month for many employees at once with individual amounts and duplicate-payment protection
 - **Payment History with Filtering**: Advanced filtering by month (T1-T12), payment method, employee
 - **Payment Status Tracking**: Real-time status updates (paid/pending/overdue)
 - **Multiple Payment Methods**: Support for cash, bank transfer, and e-wallet
@@ -247,9 +248,10 @@ guarded database functions.
 
 Follow [SECURITY_ROLLOUT.md](SECURITY_ROLLOUT.md), then apply
 `migrations/V9__security_hardening.sql`, followed by
-`migrations/V10__financial_integrity_hardening.sql`. V9 removes anonymous
-access and introduces guarded RPCs; V10 protects the financial ledger, prevents
-an expense from being shared twice, and fixes view/FK integrity.
+`migrations/V10__financial_integrity_hardening.sql` and the later numbered
+migrations through `migrations/V15__create_fund_payments_batch.sql`. V9 removes
+anonymous access and introduces guarded RPCs; V10 protects the financial ledger,
+and V15 adds atomic single/bulk fund collection with duplicate-month protection.
 
 ## Bill Sharing Workflow
 
@@ -399,6 +401,7 @@ company-fund-management/
 
 ### Fund Collection
 - Record new employee payments
+- Record one shared month for multiple employees in a single atomic batch
 - Filter payment history by month (T1-T12)
 - View payment totals and summaries
 - Track multi-month payments

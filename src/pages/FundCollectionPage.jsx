@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Calendar, CheckCircle, Clock, PiggyBank, Plus, TrendingUp, Users } from 'lucide-react';
 import Layout from '../components/Layout';
 import PaymentModal from '../components/PaymentModal';
@@ -26,6 +26,7 @@ const FundCollectionPage = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [statusYear, setStatusYear] = useState(new Date().getFullYear());
   const [searchTerm, setSearchTerm] = useState('');
+  const realtimeRefreshTimer = useRef(null);
 
   const fetchFundCollectionData = useCallback(async () => {
     setLoading(true);
@@ -81,13 +82,20 @@ const FundCollectionPage = () => {
 
   useEffect(() => {
     if (isDevelopmentMode()) return undefined;
+    const scheduleRefresh = () => {
+      window.clearTimeout(realtimeRefreshTimer.current);
+      realtimeRefreshTimer.current = window.setTimeout(fetchFundCollectionData, 250);
+    };
     const channel = supabase
       .channel('fund-collection-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, fetchFundCollectionData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payments' }, fetchFundCollectionData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payment_reconciliations' }, fetchFundCollectionData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payments' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'fund_payment_reconciliations' }, scheduleRefresh)
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    return () => {
+      window.clearTimeout(realtimeRefreshTimer.current);
+      supabase.removeChannel(channel);
+    };
   }, [fetchFundCollectionData]);
 
   const currentMonthKey = useMemo(() => {
@@ -147,24 +155,35 @@ const FundCollectionPage = () => {
     return [...years].filter(Number.isInteger).sort((a, b) => b - a);
   }, [employees, payments, reconciliations]);
 
-  const handlePaymentSubmit = async (paymentData) => {
+  const handlePaymentSubmit = async (paymentRows) => {
+    const rows = Array.isArray(paymentRows) ? paymentRows : [paymentRows];
     try {
       if (isDevelopmentMode()) {
-        setPayments((current) => [{ id: `demo-${Date.now()}`, ...paymentData, amount: Number(paymentData.amount || 0) }, ...current]);
+        const createdAt = Date.now();
+        const demoPayments = rows.map((payment, index) => ({
+          id: `demo-${createdAt}-${index}`,
+          ...payment,
+          amount: Number(payment.amount || 0),
+        }));
+        setPayments((current) => [...demoPayments, ...current]);
       } else {
-        const { error } = await supabase.from('fund_payments').insert([{
-          employee_id: paymentData.employee_id,
-          amount: paymentData.amount,
-          payment_date: paymentData.payment_date,
-          months_covered: paymentData.months_covered,
-          payment_method: paymentData.payment_method || 'cash',
-          notes: paymentData.notes,
-        }]);
+        const { error } = await supabase.rpc('create_fund_payments_batch', {
+          payments_input: rows.map((payment) => ({
+            employee_id: payment.employee_id,
+            amount: payment.amount,
+            payment_date: payment.payment_date,
+            months_covered: payment.months_covered,
+            payment_method: payment.payment_method || 'cash',
+            notes: payment.notes,
+          })),
+        });
         if (error) throw error;
         await fetchFundCollectionData();
       }
       setShowPaymentModal(false);
-      showToast('Đã ghi nhận khoản thu.');
+      showToast(rows.length === 1
+        ? 'Đã ghi nhận khoản thu.'
+        : `Đã ghi nhận ${rows.length} khoản thu cho tháng ${String(rows[0]?.months_covered?.[0] || '').slice(5, 7)}/${String(rows[0]?.months_covered?.[0] || '').slice(0, 4)}.`);
       return true;
     } catch (error) {
       showToast(`Không thể ghi nhận khoản thu: ${error.message}`, 'error');
@@ -217,7 +236,14 @@ const FundCollectionPage = () => {
           availableYears={statusYears}
         />
 
-        <PaymentModal isOpen={showPaymentModal} onClose={() => setShowPaymentModal(false)} employees={activeFundEmployees} onSubmit={handlePaymentSubmit} />
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          employees={activeFundEmployees}
+          payments={payments}
+          reconciliations={reconciliations}
+          onSubmit={handlePaymentSubmit}
+        />
       </PageTransition>
     </Layout>
   );
